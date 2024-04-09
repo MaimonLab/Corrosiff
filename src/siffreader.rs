@@ -1,20 +1,20 @@
-use std::file::File;
-
-pub enum FileType {
-    Siff,
-    FlimTiff,
-    Tiff,
-}
-
-pub struct SiffReader {
-    file: File,
-    filetype : FileType,
-}
+/// The primary `SiffReader` object, which
+/// parses files and extracts interesting
+/// information and/or data.
+use std::fs::File;
+use std::io::{BufReader, Result};
+use crate::file_data::file_types::FileType as FileType;
 
 /// A struct for reading a `.siff` file
 /// or a ScanImage-Flim `.tiff` file, 
 /// reads the data, and returns ???
-impl SiffReader {
+pub struct SiffReader {
+    _file : File,
+    _filename : String,
+    pub filetype : FileType,
+}
+
+impl SiffReader{
     
     /// Opens a file
     /// 
@@ -27,25 +27,19 @@ impl SiffReader {
     /// ```
     /// let reader = SiffReader::open("file.siff");
     /// ```
-    fn open(filename : &str) -> Self {
-        let file = File::open(filename).unwrap();
-        SiffReader {
-            file: file,
-        }
-
+    pub fn open(filename : &str) -> Result<Self> {
+        let file = File::open(&filename)?;
+        let mut buff = BufReader::new(&file);
+        
+        Ok(SiffReader {
+            _filename : String::from(filename),
+            filetype : FileType::discern_filetype(&mut buff),
+            _file : file,
+            }
+        )
     }
-
-    /// # Example
-    /// 
-    /// ```
-    /// let reader = SiffReader::open("file.siff");
-    /// reader.close();
-    /// ```
-    fn close(&self) {
-        // close the file
+    /// Copy internal `filename` field
+    pub fn filename(&self) -> &str {
+        &self._filename
     }
-}
-
-fn main() {
-    let reader = SiffReader::open("file.siff");
 }
