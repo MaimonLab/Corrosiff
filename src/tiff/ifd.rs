@@ -246,6 +246,7 @@ impl <'a, S, IFDT> IFDIterator<'a, S, IFDT>
         /// 
         /// ```rust, ignore
         /// ```
+        #[allow(dead_code)]
         fn new(reader : &'a mut S, first_ifd : IFDT::PointerSize) -> Self {
             IFDIterator{
                 reader,

@@ -17,160 +17,29 @@ use crate::tiff::{
     Tag,
     TiffTagID::{StripOffsets, StripByteCounts, Siff, },
 };
-use crate::data::image::dimensions::SIFF_YMASK as YMASK;
-use crate::data::image::dimensions::SIFF_XMASK as XMASK;
+use crate::data::image::
+    intensity::siff::{
+        registered::{
+            load_array_raw_siff_registered,
+            load_array_compressed_siff_registered,
+            sum_mask_raw_siff_registered,
+            sum_mask_compressed_siff_registered,
+        },
+        unregistered::{
+            load_array_raw_siff,
+            load_array_compressed_siff,
+            sum_mask_raw_siff,
+            sum_mask_compressed_siff,
+        },
+    }
+;
 
-/// Parses a `u64` from a photon in a raw `.siff` read
-/// to the y coordinate of the photon. If a shift is
-/// provided, it will add the shift to the y coordinate.
-/// 
-/// Can be called as:
-/// 
-/// ```rust, ignore
-/// // One argument -- just a photon
-/// let y = photon_to_y!(photon);
-/// 
-/// // Two arguments -- a photon and a y shift
-/// // The resulting y coordinate is increased by
-/// // the shift
-/// let y = photon_to_y!(photon, shift);
-/// ```
-macro_rules! photon_to_y {
-    ($photon : expr) => {
-        (($photon & YMASK) >> 48) as usize
-    };
-    ($photon : expr, $shift : expr) => {
-        (((($photon & YMASK) >> 48) as i32) + $shift) as usize
-    };
-}
+mod registered;
+mod unregistered;
+mod siff_frame;
 
-/// Parses a `u64` from a photon in a raw `.siff` read
-/// to the x coordinate of the photon. If a shift is
-/// provided, it will add the shift to the x coordinate.
-/// 
-/// Can be called as:
-/// 
-/// ```rust, ignore
-/// // One argument -- just a photon
-/// let x = photon_to_x!(photon);
-/// 
-/// // Two arguments -- a photon and an x shift
-/// // The resulting x coordinate is increased by
-/// // the shift
-/// let x = photon_to_x!(photon, shift);
-/// ```
-macro_rules! photon_to_x {
-    ($photon : expr) => {
-        (($photon & XMASK) >> 32) as usize
-    };
-    ($photon : expr, $shift : expr) => {
-        (((($photon & XMASK) >> 32) as i32) + $shift) as usize
-    };
-}
+pub use siff_frame::SiffFrame;
 
-/// Loads an allocated array with data read from a raw
-/// `.siff` format frame (presumes the `reader` argument already
-/// points to the frame) by ADDING data!
-/// 
-/// # Arguments
-/// 
-/// * `array` - The array to load the data into viewed as a 2d array
-/// * `strip_bytes` - The number of bytes in the strip
-/// * `ydim` - The height of the frame
-/// * `xdim` - The width of the frame
-/// 
-/// # Example
-/// 
-/// ```rust, ignore
-/// use ndarray::prelude::*;
-/// use std::io::BufReader;
-/// 
-/// let mut array = Array2::<u16>::zeros((512, 512));
-/// let mut reader = BufReader::new(std::fs::File::open("file.siff").unwrap());
-/// reader.seek(std::io::SeekFrom::Start(34238)).unwrap();
-/// load_array_raw_siff(&mut array, 512*512*2, 512, 512);
-/// ```
-/// 
-/// # See also
-/// 
-/// `load_array_raw_siff_registered` - for loading an array
-/// and shifting the data based on registration.
-#[binrw::parser(reader)]
-fn load_array_raw_siff<T : Into<u64>>(
-        array : &mut ArrayViewMut2<u16>,
-        strip_bytes : T,
-        ydim : u32,
-        xdim : u32,
-    ) -> binrw::BinResult<()> {
-        
-    let mut data: Vec<u8> = vec![0; strip_bytes.into() as usize];
-    reader.read_exact(&mut data)?;
-
-    try_cast_slice::<u8, u64>(&data)
-    .map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?.iter().for_each(|siffphoton : &u64| {
-        array[
-            [photon_to_y!(siffphoton) % (ydim as usize),
-            photon_to_x!(siffphoton) % (xdim as usize),
-            ]
-        ]+=1;
-    });
-    Ok(())
-}
-
-
-/// Loads an allocated array with data read from a raw
-/// `.siff` format frame (presumes the `reader` argument already
-/// points to the frame) by ADDING data!
-/// 
-/// # Arguments
-/// 
-/// * `array` - The array to load the data into viewed as a 2d array
-/// * `strip_bytes` - The number of bytes in the strip
-/// * `ydim` - The height of the frame
-/// * `xdim` - The width of the frame
-/// * `registration` - A tuple of the pixelwise shifts, (y,x)
-/// 
-/// # Example
-/// 
-/// ```rust, ignore
-/// use ndarray::prelude::*;
-/// use std::io::BufReader;
-/// 
-/// let mut array = Array2::<u16>::zeros((512, 512));
-/// let mut reader = BufReader::new(std::fs::File::open("file.siff").unwrap());
-/// reader.seek(std::io::SeekFrom::Start(34238)).unwrap();
-/// load_array_raw_siff_registered(&mut array, 512*512*2, 512, 512, (2, 2))
-/// ```
-/// 
-/// # See also
-/// 
-/// `load_array_raw_siff` - for loading an array
-/// without registration (plausibly faster?)
-#[binrw::parser(reader)]
-fn load_array_raw_siff_registered<T : Into<u64>> (
-    array : &mut ArrayViewMut2<u16>,
-    strip_bytes : T,
-    ydim : u32,
-    xdim : u32,
-    registration : (i32, i32),
-    ) -> binrw::BinResult<()> {
-    let mut data: Vec<u8> = vec![0; strip_bytes.into() as usize];
-    reader.read_exact(&mut data)?;
-
-    try_cast_slice::<u8, u64>(&data)
-    .map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?.iter().for_each(|siffphoton : &u64| {
-        array[
-            [photon_to_y!(siffphoton, registration.0) % (ydim as usize),
-             photon_to_x!(siffphoton, registration.1) % (xdim as usize),
-            ]
-        ]+=1;
-    });
-    Ok(())
-}
 
 /// Parses a raw `.siff` format frame and returns
 /// an `Intensity` struct containing the intensity data.
@@ -185,111 +54,6 @@ fn raw_siff_parser<T : Into<u64>>(
     );
     load_array_raw_siff(reader, endian, (&mut frame.view_mut(), strip_bytes, ydim, xdim))?;
     Ok(frame)
-}
-
-/// Parses a compressed `.siff` format frame and returns
-/// an `Intensity` struct containing the intensity data.
-/// 
-/// Expected to be at the data strip, so it will go backwards by the size of the
-/// intensity data and read that.
-#[binrw::parser(reader)]
-fn load_array_compressed_siff(
-        array : &mut ArrayViewMut2<u16>,
-        ydim : u32,
-        xdim : u32
-    ) -> binrw::BinResult<()> {
-    
-    reader.seek(std::io::SeekFrom::Current(
-        -(ydim as i64 * xdim as i64 * std::mem::size_of::<u16>() as i64)
-    ))?;
-    
-    let mut data : Vec<u8> = vec![0; 
-        ydim as usize * xdim as usize * std::mem::size_of::<u16>()
-    ];
-    reader.read_exact(&mut data)?;
-
-    let data = try_cast_slice::<u8, u16>(&data).map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?;
-
-    array.assign(
-        &mut Array2::<u16>::from_shape_vec(
-            (ydim as usize, xdim as usize),
-            data.to_vec())
-        .map_err(|err| binrw::Error::Io(
-            IOError::new(IOErrorKind::InvalidData, err))
-        )?
-    );
-    Ok(())
-}
-
-#[binrw::parser(reader)]
-fn load_array_compressed_siff_registered(
-        array : &mut ArrayViewMut2<u16>,
-        ydim : u32,
-        xdim : u32,
-        registration : (i32, i32)
-    ) -> binrw::BinResult<()> {
-    
-    reader.seek(std::io::SeekFrom::Current(-(ydim as i64 * xdim as i64 * std::mem::size_of::<u16>() as i64)))?;
-    
-    let mut data : Vec<u8> = vec![0; 
-        ydim as usize * xdim as usize * std::mem::size_of::<u16>()
-    ];
-    reader.read_exact(&mut data)?;
-
-    let data = try_cast_slice::<u8, u16>(&data).map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?;
-
-    let unregistered =  Array2::<u16>::from_shape_vec(
-        (ydim as usize, xdim as usize),
-        data.to_vec()
-    ).map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?;
-
-    //Store the shifted version of unregistered in array    
-    match registration {
-        // No shift
-        (0, 0) => {
-            // seems silly with an unnecessary copy
-            array.assign(&unregistered);
-        },
-
-        // x only
-        (0, x_shift) => {
-            array.slice_mut(s![.., x_shift..]).assign(
-                &unregistered.slice(
-                    s![.., ..-x_shift]));
-            
-            array.slice_mut(s![.., ..x_shift]).assign(
-                &unregistered.slice(
-                    s![.., -x_shift..]));
-        },
-
-        // y only
-        (y_shift, 0) => {
-            array.slice_mut(s![y_shift.., ..]).assign(
-                &unregistered.slice(
-                    s![..-y_shift, ..]));
-
-            array.slice_mut(s![..y_shift, ..]).assign(
-                &unregistered.slice(
-                    s![-y_shift.., ..]));
-        },
-        (y_shift, x_shift) => {
-            array.slice_mut(s![y_shift.., x_shift..]).assign(
-                &unregistered.slice(
-                    s![..-y_shift, ..-x_shift]));
-            
-            array.slice_mut(s![..y_shift, ..x_shift]).assign(
-                &unregistered.slice(
-                    s![-y_shift.., -x_shift..]));
-        }
-    }
-
-    Ok(())
 }
 
 /// Parses a compressed `.siff` format frame and returns
@@ -350,11 +114,11 @@ fn compressed_siff_parser(
 /// 
 /// * `load_array_registered` - for loading an array
 /// and shifting the data based on registration.
-pub fn load_array<'a, T, S>(
-        reader : &'a mut T,
-        ifd : &'a S,
+pub fn load_array<'a, ReaderT, I>(
+        reader : &'a mut ReaderT,
+        ifd : &'a I,
         array : &'a mut ArrayViewMut2<u16>
-    ) -> Result<(), IOError> where S : IFD, T : Read + Seek
+    ) -> Result<(), IOError> where I : IFD, ReaderT : Read + Seek
     {
     let pos = reader.stream_position()?;
     reader.seek(
@@ -396,11 +160,12 @@ pub fn load_array<'a, T, S>(
     reader.seek(std::io::SeekFrom::Start(pos))?;
     Ok(())
 }
+
 /// Loads an allocated array with data read directly
 /// from a `.siff` file. Will NOT change the `Seek`
 /// location of the reader.
 /// 
-/// # Arguments
+/// ## Arguments
 /// 
 /// * `reader` - Any reader of a `.siff` file
 /// 
@@ -417,7 +182,7 @@ pub fn load_array<'a, T, S>(
 /// in the direct of the shift itself, i.e. a positive
 /// registration in the y direction will shift the frame down.
 /// 
-/// # Example
+/// ## Example
 /// 
 /// ```rust, ignore
 /// use ndarray::prelude::*;
@@ -432,7 +197,7 @@ pub fn load_array<'a, T, S>(
 /// load_array_registered(&mut reader, &ifd, &mut array.view_mut(), registration);
 /// ```
 /// 
-/// # See also
+/// ## See also
 /// 
 /// * `load_array` - for loading an array without registration
 pub fn load_array_registered<'a, T, S>(
@@ -482,7 +247,7 @@ pub fn load_array_registered<'a, T, S>(
             ))
         }
     }.map_err(|err| {
-        reader.seek(std::io::SeekFrom::Start(pos));
+        let _ = reader.seek(std::io::SeekFrom::Start(pos));
         IOError::new(IOErrorKind::InvalidData, err)
     })?;
 
@@ -490,83 +255,155 @@ pub fn load_array_registered<'a, T, S>(
     Ok(())
 }
 
-/// A local struct for reading directly.
-/// Only used internally for testing.
-pub struct SiffFrame{
-    pub intensity : ndarray::Array2<u16>,
-}
-
-impl SiffFrame {
-    /// Parses a frame from a `.siff` file being viewed by
-    /// `reader` using the metadata in the `ifd` argument
-    /// to return a `SiffFrame` struct containing the intensity.
-    /// 
-    /// Does not move the `Seek` position of the reader because it
-    /// is restored to its original position after reading the frame,
-    /// EXCEPT if it errors!.
-    /// 
-    /// ## Arguments
-    /// 
-    /// * `ifd` - The IFD of the frame to load
-    /// 
-    /// * `reader` - The reader of the `.siff` file
-    /// 
-    /// ## Returns
-    /// 
-    /// * `Result<SiffFrame, IOError>` - A `SiffFrame` struct containing the intensity data
-    /// for the requested frame.
-    /// 
-    /// ## Errors
-    /// 
-    /// * `IOError` - If the frame cannot be read for any reason
-    /// this will throw an `IOError` and will NOT return the reader
-    /// to its original position!
-    pub fn from_ifd<'a, 'b, I, ReaderT>(ifd : &'a I, reader : &'b mut ReaderT) 
-    -> Result<Self, IOError> where I : IFD, ReaderT : Read + Seek {
-        let cur_pos = reader.stream_position()?;
-
-        reader.seek(
+/// Sums all pixels in the requested frame that are
+/// masked by the `mask` array and stores the sum
+/// in the `frame_sum` argument.
+/// 
+/// ## Arguments
+/// 
+/// * `reader` - Any reader of a `.siff` file
+/// 
+/// * `ifd` - The IFD of the frame to load into
+/// 
+/// * `frame_sum` - The location to store the summed
+/// mask value
+/// 
+/// * `mask` - The mask to apply to the frame
+/// 
+/// ## Example
+/// 
+/// ```rust, ignore
+/// use ndarray::prelude::*;
+/// use std::fs::File;
+/// 
+/// let mut frame_sum = 0;
+/// let mut mask = Array2::<bool>::zeros((512, 512));
+/// 
+/// let mut reader = File::open("file.siff").unwrap());
+/// // *- snip - *  get ifd for the frame of interest //
+/// 
+/// sum_mask(&mut reader, &ifd, &mut frame_sum, &mask.view());
+/// ```
+/// 
+/// ## See also
+/// 
+/// - `sum_mask_registered` - for summing the intensity
+/// data of a frame with registration
+pub fn sum_mask<I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    frame_sum : &mut u64,
+    mask : &ArrayView2<bool>,
+) -> Result<(), IOError> {
+    
+    let pos = reader.stream_position()?;
+    
+    reader.seek(
         std::io::SeekFrom::Start(
-                ifd.get_tag(StripOffsets)
-                .ok_or(
-                IOError::new(IOErrorKind::InvalidData, "Strip offset not found")
-                )?.value().into()
-            )
-        )?;
+            ifd.get_tag(StripOffsets)
+            .ok_or(
+                IOError::new(IOErrorKind::InvalidData, 
+                "Strip offset not found"
+                )
+            )?.value().into()
+        )
+    )?;
 
-        let parsed = match ifd.get_tag(Siff).unwrap().value().into() {
-            0 => {
-                raw_siff_parser(reader, binrw::Endian::Little,
+    match ifd.get_tag(Siff).unwrap().value().into() {
+        0 => {
+            sum_mask_raw_siff(reader, binrw::Endian::Little, 
                 (
+                    frame_sum,
+                    &mask.view(),
                     ifd.get_tag(StripByteCounts).unwrap().value(),
                     ifd.height().unwrap().into() as u32,
                     ifd.width().unwrap().into() as u32,
                 )
-            )},
-            1 => {
-                compressed_siff_parser(reader, binrw::Endian::Little, 
+            )
+        },
+        1 => {
+            sum_mask_compressed_siff(reader, binrw::Endian::Little,
                 (
+                    frame_sum,
+                    &mask.view(),
                     ifd.height().unwrap().into() as u32,
                     ifd.width().unwrap().into() as u32,
                 )
-            )},
-            _ => {Err(
-                binrw::error::Error::Io(IOError::new(
-                    IOErrorKind::InvalidData, "Invalid Siff tag")
-                ))
-            }
+            )
+        },
+        _ => {
+            Err(binrw::Error::Io(IOError::new(IOErrorKind::InvalidData,
+                "Invalid Siff tag"
+                )
+            ))
         }
-        .map_err(|err| {
-            reader.seek(std::io::SeekFrom::Start(cur_pos));
-            IOError::new(IOErrorKind::InvalidData, err)
-        })?;
+    }.map_err(|err| {
+        let _ = reader.seek(std::io::SeekFrom::Start(pos));
+        IOError::new(IOErrorKind::InvalidData, err)
+    })?;
 
-        reader.seek(std::io::SeekFrom::Start(cur_pos));
+    reader.seek(std::io::SeekFrom::Start(pos))?;
+    Ok(())
+}
 
-        Ok(SiffFrame {
-            intensity : parsed
-        })
-    }
+pub fn sum_mask_registered<I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    frame_sum : &mut u64,
+    mask : &ArrayView2<bool>,
+    registration : (i32, i32),
+) -> Result<(), IOError> {
+    
+    let pos = reader.stream_position()?;
+    
+    reader.seek(
+        std::io::SeekFrom::Start(
+            ifd.get_tag(StripOffsets)
+            .ok_or(
+                IOError::new(IOErrorKind::InvalidData, 
+                "Strip offset not found"
+                )
+            )?.value().into()
+        )
+    )?;
+
+    match ifd.get_tag(Siff).unwrap().value().into() {
+        0 => {
+            sum_mask_raw_siff_registered(reader, binrw::Endian::Little, 
+                (
+                    frame_sum,
+                    &mask.view(),
+                    ifd.get_tag(StripByteCounts).unwrap().value(),
+                    ifd.height().unwrap().into() as u32,
+                    ifd.width().unwrap().into() as u32,
+                    registration,
+                )
+            )
+        },
+        1 => {
+            sum_mask_compressed_siff_registered(reader, binrw::Endian::Little,
+                (
+                    frame_sum,
+                    &mask.view(),
+                    ifd.height().unwrap().into() as u32,
+                    ifd.width().unwrap().into() as u32,
+                    registration,
+                )
+            )
+        },
+        _ => {
+            Err(binrw::Error::Io(IOError::new(IOErrorKind::InvalidData,
+                "Invalid Siff tag"
+                )
+            ))
+        }
+    }.map_err(|err| {
+        let _ = reader.seek(std::io::SeekFrom::Start(pos));
+        IOError::new(IOErrorKind::InvalidData, err)
+    })?;
+
+    reader.seek(std::io::SeekFrom::Start(pos))?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -729,9 +566,10 @@ mod tests {
     }
 
     #[test]
-
     /// Tests the photon conversion macros with fake photons
     fn test_photon_parse() {
+        use crate::data::image::dimensions::macros::*;
+
         let y : u16 = (((1 as u64) << 16)-1) as u16;
         let x : u16 = 1;
         let arrival : u32 = 1;

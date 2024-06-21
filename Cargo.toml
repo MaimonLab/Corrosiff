@@ -10,6 +10,7 @@ description = "Rust-based tools for parsing and modifying `.siff` FLIM data file
 [dependencies]
 binrw = "*"
 bytemuck = {version = "1.16.0", features = ["extern_crate_std"]}
+itertools = "*"
 ndarray = "*"
 rayon = "*" 
 rand = "*"
@@ -21,14 +22,24 @@ lto = "fat"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 
-# [[bench]]
-# name = "opening_files_benchmark"
-# # #harness = true
-# harness = false
+[[bench]]
+name = "opening_files_benchmark"
+harness = false
 
 [[bench]]
 name = "read_frames_benchmark"
-# #harness = true
+harness = false
+
+[[bench]]
+name = "mask_frames_benchmark"
+harness = false
+
+[[bench]]
+name = "flim_read_benchmark"
+harness = false
+
+[[bench]]
+name = "metadata_benchmarks"
 harness = false
 
 [[bin]]

@@ -10,9 +10,9 @@ const LONG_SIFF_PATH: &str = "/Users/stephen/Desktop/Data/imaging/2024-04/2024-0
 /// Open multiple files, read either a few frames quickly with and without registration
 /// (to compare overhead latency) and then many frames with and without registration
 /// (to compare the actual effect of adding registration)
-fn criterion_benchmark_read_frames(c: &mut Criterion) {
+fn criterion_benchmark_read_flim(c: &mut Criterion) {
     let siffreader = corrosiff::open_siff(SHORT_SIFF_PATH).unwrap();
-    let mut read_bench = c.benchmark_group("Frame read benchmarks");
+    let mut read_bench = c.benchmark_group("Flim reading benchmarks");
     let frame_vec = Vec::<u64>::from_iter(0..40);
     read_bench.bench_with_input(
         BenchmarkId::new("Read short siff, 40 frames unregistered", 
@@ -20,7 +20,7 @@ fn criterion_benchmark_read_frames(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.get_frames_intensity(frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.get_frames_flim(frames, None).unwrap()))
         },
     );
 
@@ -36,7 +36,7 @@ fn criterion_benchmark_read_frames(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.get_frames_intensity(frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.get_frames_flim(frames, Some(&reg)).unwrap()))
         },
     );
 
@@ -49,7 +49,7 @@ fn criterion_benchmark_read_frames(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.get_frames_intensity(frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.get_frames_flim(frames, None).unwrap()))
         },
     );
 
@@ -65,35 +65,7 @@ fn criterion_benchmark_read_frames(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.get_frames_intensity(frames, Some(&reg)).unwrap()))
-        },
-    );
-}
-
-fn criterion_benchmark_histograms(c: &mut Criterion) {
-    let siffreader = corrosiff::open_siff(SHORT_SIFF_PATH).unwrap();
-    let mut read_bench = c.benchmark_group("Frame read benchmarks");
-    let frame_vec = Vec::<u64>::from_iter(0..40);
-    read_bench.bench_with_input(
-        BenchmarkId::new("Read histogram from 40 frames", 
-            40,
-        ),
-        &frame_vec.as_slice(),
-        |bench, frames| {
-            bench.iter(|| black_box(siffreader.get_histogram(frames).unwrap()))
-        },
-    );
-
-    let siffreader = corrosiff::open_siff(LONG_SIFF_PATH).unwrap();
-    let frame_vec = Vec::<u64>::from_iter(0..siffreader.num_frames() as u64);
-    read_bench.sample_size(20);
-    read_bench.bench_with_input(
-        BenchmarkId::new("Read long siff, get histogram from all frames", 
-            -1,
-        ),
-        &frame_vec.as_slice(),
-        |bench, frames| {
-            bench.iter(|| black_box(siffreader.get_histogram(frames).unwrap()))
+            bench.iter(|| black_box(siffreader.get_frames_flim(frames, Some(&reg)).unwrap()))
         },
     );
 }
@@ -101,7 +73,6 @@ fn criterion_benchmark_histograms(c: &mut Criterion) {
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = criterion_benchmark_read_frames,
-    criterion_benchmark_histograms,
+    targets = criterion_benchmark_read_flim,
 );
 criterion_main!(benches);

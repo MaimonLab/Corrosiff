@@ -9,10 +9,16 @@ mod flim;
 
 pub use intensity::siff::load_array as load_array_intensity;
 pub use intensity::siff::load_array_registered as load_array_intensity_registered;
+pub use intensity::siff::sum_mask as sum_intensity_mask;
+pub use intensity::siff::sum_mask_registered as sum_intensity_mask_registered;
 
 pub use flim::histogram::load_histogram as load_histogram;
+pub use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays
+    as load_flim_empirical_and_intensity_arrays;
+pub use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays_registered
+    as load_flim_empirical_and_intensity_arrays_registered;
 
-pub use dimensions::{Dimensions, DimensionsError};
+pub use dimensions::{Dimensions, DimensionsError, roll};
 
 use ndarray;
 

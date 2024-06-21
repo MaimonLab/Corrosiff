@@ -17,6 +17,22 @@ use binrw::BinRead;
 //     U64,
 // }
 
+/// The `unwrap_tag_as!` macro is a convenience macro
+/// for unwrapping a tag and converting it to a specific
+/// type. Use: `unwrap_tag_as!(ifd, tag, into)`
+/// 
+/// ## Arguments
+/// 
+/// * `ifd` - The IFD to get the tag from
+/// * `tag` - The tag to get
+/// * `into` - The type to convert the tag to
+#[macro_export]
+macro_rules! unwrap_tag_as {
+    ($ifd:expr, $tag:expr, $into : tt) => {
+        $ifd.get_tag($tag).unwrap().value().into() as $into
+    };
+}
+
 /// The `Tag` trait is implemented by the `TiffTag` and
 /// `BigTag` struct types, which contain the same types of
 /// fields but different data sizes.

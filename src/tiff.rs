@@ -8,4 +8,4 @@ mod tags;
 
 pub use tags::{Tag, TiffTagID};
 pub use ifd::{IFD, BigTiffIFD};
-pub use file_format::FileFormat;
+pub use file_format::{FileFormat, dimensions_consistent};

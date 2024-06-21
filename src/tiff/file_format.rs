@@ -139,7 +139,7 @@ struct SiffHeader {
 /// let dims = dimensions_consistent(&ifds);
 /// assert_eq!(dims, Some(Dimensions::new(512, 512)));
 /// ```
-fn dimensions_consistent<IFDType : IFD>(ifds : &Vec<IFDType>)->Option<Dimensions>{
+pub fn dimensions_consistent<IFDType : IFD>(ifds : &Vec<IFDType>)->Option<Dimensions>{
     if ifds.len() == 0 {
         return None;
     }
@@ -152,6 +152,16 @@ fn dimensions_consistent<IFDType : IFD>(ifds : &Vec<IFDType>)->Option<Dimensions
 }
 
 impl FileFormat{
+
+    /// Returns whether the file being read
+    /// uses the BigTiff format vs. a standard
+    /// 32 bit Tiff specification.
+    pub fn is_bigtiff(&self) -> bool {
+        match self._tiff_type {
+            TiffType::BigTiff => true,
+            TiffType::Tiff => false,
+        }
+    }
 
     /// Checks a file against all the
     /// criteria to determine the enum
@@ -209,6 +219,7 @@ impl FileFormat{
 
     /// Returns an `IFD` object from the pointer to its start. Mostly
     /// for debugging.
+    #[allow(dead_code)]
     pub fn read_ifd<ReaderT : SeekRead>(buffer : &mut ReaderT, offset : u64)
         -> Result<BigTiffIFD, std::io::Error> {
         buffer.seek(std::io::SeekFrom::Start(offset))?;
@@ -227,6 +238,7 @@ impl FileFormat{
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_ifd_vec<'reader, ReaderT>(&self, buff : &'reader mut ReaderT) -> Vec<BigTiffIFD>
     where ReaderT : SeekRead + Sized{
         self.get_ifd_iter(buff).collect()
@@ -245,14 +257,15 @@ impl FileFormat{
     }
 
     /// Returns the size of a single bin in picoseconds
+    #[allow(dead_code)]
     pub fn flim_tau_bin_size_picoseconds(&self) -> Option<u32> {
         let needle = "binResolution = ";
         let tau_bin_ptr = self.nvfd.find(needle)?;
         let tau_bin_ptr = tau_bin_ptr + needle.len();
         let tau_bin_len = self.nvfd[tau_bin_ptr..].find("\n")?;
         let tau_bin = self.nvfd[tau_bin_ptr..tau_bin_ptr+tau_bin_len].trim();
-        let binRes = tau_bin.parse::<u32>().ok()?;
-        Some(5 * u32::pow(2,binRes))
+        let bin_res = tau_bin.parse::<u32>().ok()?;
+        Some(5 * u32::pow(2,bin_res))
     }
 
 

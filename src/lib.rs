@@ -10,7 +10,8 @@
 //! can be constructed with `open_siff` and then used to read frames data,
 //! metadata, and other information. Some convenience methods are provided
 //! in the `corrosiff` module for converting `.siff` files to `.tiff` files
-//! or for reading frames directly for a one-time call.
+//! or for reading frames directly for a one-time call if you don't expect
+//! multiple interactions with the file.
 
 use std::{
     io::Result as IOResult,
@@ -23,12 +24,16 @@ use ndarray::prelude::*;
 
 mod tiff;
 mod data;
+mod utils;
+
+use crate::data::image::DimensionsError;
 
 pub mod metadata;
 pub mod siffreader;
 
-pub use siffreader::{SiffReader, FramesError};
-pub use metadata::Metadata;
+pub use siffreader::SiffReader;
+pub use utils::FramesError;
+pub use metadata::FrameMetadata;
 pub use data::time::ClockBase;
 
 #[derive(Debug)]
@@ -36,6 +41,9 @@ pub enum CorrosiffError {
     IOError(std::io::Error),
     FramesError(FramesError),
     DimensionsError(data::image::DimensionsError),
+    InvalidClockBase,
+    NoSystemTimestamps,
+    NotImplementedError,
 }
 
 impl From<std::io::Error> for CorrosiffError {
@@ -50,6 +58,12 @@ impl From<FramesError> for CorrosiffError {
     }
 }
 
+impl From<DimensionsError> for CorrosiffError {
+    fn from(err : DimensionsError) -> Self {
+        CorrosiffError::DimensionsError(err)
+    }
+}
+
 impl std::error::Error for CorrosiffError {}
 
 impl std::fmt::Display for CorrosiffError {
@@ -58,6 +72,9 @@ impl std::fmt::Display for CorrosiffError {
             CorrosiffError::IOError(err) => write!(f, "IO Error: {}", err),
             CorrosiffError::FramesError(err) => write!(f, "Frames Error: {}", err),
             CorrosiffError::DimensionsError(err) => write!(f, "Dimensions Error: {}", err),
+            CorrosiffError::InvalidClockBase => write!(f, "Invalid clock base for function called"),
+            CorrosiffError::NoSystemTimestamps => write!(f, "No system clock timestamps for this file"),
+            CorrosiffError::NotImplementedError => write!(f, "Not Implemented"),
         }
     }
 }
@@ -131,11 +148,84 @@ pub fn open_siff(filename : &str) -> IOResult<siffreader::SiffReader> {
     SiffReader::open(filename)
 }
 
-pub fn time_axis(
+/// `time_axis epoch`
+/// 
+/// Returns the timestamp of all frames in the `.siff` file
+/// in `epoch` time, determined either by the system clock stamps
+/// of the microscope computer or by counting laser sync pulses.
+/// 
+/// Returns a one-dimensional array of `u64` values
+/// 
+/// ## See also
+/// - `time_axis_experiment` for time since acquisition began
+/// - `time_axis_epoch_both` to get both system and laser timestamps
+/// in one array, which is more useful for self-correction.
+/// 
+/// ## Errors
+/// 
+/// * `CorrosiffError::InvalidClockBase` - If the clock base is not
+/// `EpochLaser` or `EpochSystem`, this error is returned to signify
+/// that the user likely wanted to call `time_axis_experiment` 
+/// or `time_axis_epoch_both` instead.
+pub fn time_axis_epoch(
     siffreader : &SiffReader,
     units : ClockBase
-) -> IOResult<()> {
-    Ok(())
+) -> Result<Array1<u64>, CorrosiffError> {
+    match units {
+        ClockBase::EpochLaser => {
+            siffreader.get_epoch_timestamps_laser(
+                siffreader.frames_vec().as_slice()
+            )
+        },
+        ClockBase::EpochSystem => {
+            siffreader.get_epoch_timestamps_system(
+                siffreader.frames_vec().as_slice()
+            )
+        },
+        _ => Err(CorrosiffError::InvalidClockBase)
+    }
+}
+
+/// `time_axis_experiment`
+/// 
+/// Returns the timestamp of all frames in the `.siff` file
+/// in `experiment` time, determined by the time since the
+/// acquisition began (in seconds).
+pub fn time_axis_experiment(
+    siffreader : &SiffReader
+) -> Result<Array1<f64>, CorrosiffError> {
+    siffreader.get_experiment_timestamps(
+        siffreader.frames_vec().as_slice()
+    )
+}
+
+/// `time_axis_epoch_both`
+/// 
+/// Returns the timestamp of all frames in the `.siff` file
+/// in both `epoch` time bases, one computed from counting
+/// laser pulses (highly regular but susceptible to drifting from
+/// the system clock) and from regular system clock calls (high jitter,
+/// but self-correcting via the PTP connection to a master clock). Regressing
+/// the two against each other should provide a correcting factor for the
+/// laser timestamps to allow highly precise timing of every frame.
+/// 
+/// ## Returns
+/// 
+/// * `Result<Array2<u64>, CorrosiffError>` - An `Array2<u64>` containing the
+/// timestamps of all frames in the `.siff` file, with the first row
+/// being the laser timestamps and the second row being the system timestamps.
+/// 
+/// ## Errors
+/// 
+/// * `CorrosiffError::NoSystemTimestamps` - If there are no system timestamps
+/// in the `.siff` file, this error is returned.
+/// 
+/// * `CorrosiffError::DimensionsError(DimensionsError)` - If the requested
+/// frames are out of bounds, this error is returned.
+pub fn time_axis_epoch_both(
+    siffreader : &SiffReader
+) -> Result<Array2<u64>, CorrosiffError> {
+    siffreader.get_epoch_timestamps_both(siffreader.frames_vec().as_slice())
 }
 
 /// `get_frames(path, frames, registration)` returns the intensity data of the
@@ -236,6 +326,10 @@ mod tests {
     pub static TEST_FILE_PATH : &str = "/Users/stephen/Desktop/Data/imaging/2024-04/2024-04-17/21Dhh_GCaFLITS/Fly1/BarOnAtTen_1.siff";
     pub const UNCOMPRESSED_FRAME_NUM : usize = 14;
     pub const COMPRESSED_FRAME_NUM : usize = 40;
+    
+    pub static APPENDED_TEXT_FILE : &str = "/Users/stephen/Desktop/Data/imaging/2024-05/2024-05-27/L2Split_GCaFLITS_KCL/Fly1/KClApplication_1.siff";
+
+    pub static BIG_FILE_PATH :&str = "/Users/stephen/Desktop/Data/imaging/2024-05/2024-05-27/SS02255_greenCamui_alpha/Fly1/PB_1.siff";
 
     #[test]
     fn test_open_siff() {
@@ -262,7 +356,6 @@ mod tests {
     }
 
     // TiffMode tests
-
     #[test]
     fn test_tiff_mode_from_string_slice() {
         let mode = TiffMode::from_string_slice("OME");
@@ -337,9 +430,13 @@ pub extern "C" fn close_siff_extern(reader : *mut SiffReader) -> () {
     };
 }
 
-///
+/// NOT IMPLEMENTED
 #[no_mangle]
-pub extern "C" fn get_frames_extern(reader : *mut SiffReader, frames : *const u64, len : usize) -> i32 {
+pub extern "C" fn get_frames_extern(
+    reader : *mut SiffReader,
+    frames : *const u64,
+    len : usize) -> i32 {
+    
     let reader = unsafe {
         assert!(!reader.is_null());
         &*reader
@@ -349,22 +446,9 @@ pub extern "C" fn get_frames_extern(reader : *mut SiffReader, frames : *const u6
     };
     let frames = frames.to_vec();
     reader.filename();
-
+    0
     //0;
     //reader.get_histogram();
-    let frames_array = reader.get_frames_intensity(&frames, None);
-    if frames_array.is_err() {
-        match frames_array.unwrap_err() {
-            FramesError::DimensionsError(dim) => {
-                println!("Dimensions error: {}", dim);
-                return -3;
-            },
-            FramesError::IOError(_) => {
-                println!("IO error");
-                return -2
-            },
-            _ => return -1,
-        }
-    }
-    frames_array.unwrap().sum() as i32
+    //let frames_array = reader.get_frames_intensity(&frames, None);
+    //frames_array.unwrap().sum() as i32
 }

@@ -142,6 +142,7 @@ dependencies = [
  "binrw",
  "bytemuck",
  "criterion",
+ "itertools",
  "ndarray",
  "rand",
  "rayon",

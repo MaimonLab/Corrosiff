@@ -3,8 +3,16 @@
 A `Rust`-based reader for `.siff` file data. An excuse to learn
 and use `Rust`, which I have to admit has been pretty enjoyable.
 
+TODOS:
+
+- `get_epoch_timestamps_both` doesn't error if `system` timestamps
+don't exist! It will just crash! Because I don't use the `?` correctly.
+
+- `C`-compatible `FFI`.
+
 # Installation
 ---------------
+
 
 # Sections
 -----------

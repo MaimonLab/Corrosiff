@@ -6,5 +6,7 @@
 
 pub enum ClockBase {
     Experiment,
-    Epoch
+    EpochLaser,
+    EpochSystem,
+    Both
 }
