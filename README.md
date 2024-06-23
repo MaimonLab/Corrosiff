@@ -42,6 +42,14 @@ build it with
 `cargo build --release`, providing libraries for use by other `Rust`
 code (such as the `corrosiffpy` package).
 
+Alternatively, you can simply specify this repository in your
+`Cargo.toml`:
+
+```
+[dependencies]
+corrosiff = { git = "https://github.com/MaimonLab/Corrosiff.git" }
+```
+
 
 # Sections
 -----------

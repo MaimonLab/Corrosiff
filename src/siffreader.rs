@@ -2003,7 +2003,80 @@ impl SiffReader{
         let mut intensity_array = Array2::<u64>::zeros((frames.len(), rois.dim().0));
         let mut lifetime_array = Array2::<f64>::zeros((frames.len(), rois.dim().0));
 
-        unimplemented!()
+        // More messy parallelization that _almost_ boilerplate but not quite
+        let chunk_size = 2500;
+
+        let n_threads = frames.len()/chunk_size + 1;
+        let remainder = frames.len() % n_threads;
+
+        // Compute the bounds for each threads operation
+        let mut offsets = vec![];
+        let mut start = 0;
+        for i in 0..n_threads {
+            let end = start + chunk_size + if i < remainder { 1 } else { 0 };
+            offsets.push((start, end));
+            start = end;
+        }
+
+        // Create an array of chunks to parallelize
+        let array_chunks : Vec<_> = izip!(
+            intensity_array.axis_chunks_iter_mut(Axis(0), chunk_size),
+            lifetime_array.axis_chunks_iter_mut(Axis(0), chunk_size)
+        ).collect();
+
+        array_chunks.into_par_iter().enumerate().try_for_each(
+            |(chunk_idx, (mut intensity_chunk, mut lifetime_chunk))|
+            -> Result<(), CorrosiffError> {
+            // Get the frame numbers and ifds for the frames in the chunk
+            let start = chunk_idx * chunk_size;
+            let end = ((chunk_idx + 1) * chunk_size).min(frames.len());
+
+            let local_frames = &frames[start..end];
+            let mut local_f = File::open(self._filename.clone()).unwrap();
+            
+            let roi_cycle = rois.axis_iter(Axis(1)).cycle();
+            // roi_cycle needs to be incremented by the start value
+            // modulo the length of the roi_cycle
+            let roi_cycle = roi_cycle.skip(start % rois.dim().1);
+
+            match registration {
+                Some(reg) => {
+                    izip!(local_frames.iter(), intensity_chunk.axis_iter_mut(Axis(0)), lifetime_chunk.axis_iter_mut(Axis(0)), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_frame_intensities, mut this_frame_lifetimes, rois_plane)|
+                            -> Result<(), CorrosiffError> {
+                            sum_lifetime_intensity_masks_registered(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_frame_lifetimes,
+                                &mut this_frame_intensities,
+                                &rois_plane,
+                                *reg.get(&this_frame).unwrap(),
+                            )?;
+                            Ok(())
+                    })?;
+                },
+                None => {
+                    izip!(local_frames.iter(), intensity_chunk.axis_iter_mut(Axis(0)), lifetime_chunk.axis_iter_mut(Axis(0)), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_frame_intensities, mut this_frame_lifetimes, rois_plane)|
+                            -> Result<(), CorrosiffError> {
+                            sum_lifetime_intensity_masks(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_frame_lifetimes,
+                                &mut this_frame_intensities,
+                                &rois_plane,
+                            )?;
+                            Ok(())
+                        })?;
+                },
+            }
+            Ok(())
+            }
+        )?;
+
+        Ok((lifetime_array, intensity_array))
     }
 
 }
