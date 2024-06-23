@@ -36,6 +36,9 @@ pub use utils::FramesError;
 pub use metadata::FrameMetadata;
 pub use data::time::ClockBase;
 
+/// The `CorrosiffError` class
+/// reflects the major types of errors
+/// that occur in this library.
 #[derive(Debug)]
 pub enum CorrosiffError {
     IOError(std::io::Error),
