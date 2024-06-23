@@ -16,7 +16,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
 
     //////////////////////// FLAT MASKS/////////////////
     let siffreader = corrosiff::open_siff(SHORT_SIFF_PATH).unwrap();
-    let mut read_bench = c.benchmark_group("Mask sum benchmarks");
+    let mut read_bench = c.benchmark_group("FLIM Mask sum benchmarks");
     let frame_vec = Vec::<u64>::from_iter(0..40);
 
     let frame_dims = siffreader.image_dims().unwrap().to_tuple();
@@ -30,7 +30,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_flat(&mask.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_flat(&mask.view(), frames, None).unwrap()))
         },
     );
 
@@ -46,7 +46,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_flat(&mask.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_flat(&mask.view(), frames, Some(&reg)).unwrap()))
         },
     );
 
@@ -65,7 +65,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_flat(&mask.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_flat(&mask.view(), frames, None).unwrap()))
         },
     );
 
@@ -81,7 +81,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_flat(&mask.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_flat(&mask.view(), frames, Some(&reg)).unwrap()))
         },
     );
 
@@ -102,7 +102,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_volume(&mask.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_volume(&mask.view(), frames, None).unwrap()))
         },
     );
 
@@ -118,7 +118,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_volume(&mask.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_volume(&mask.view(), frames, Some(&reg)).unwrap()))
         },
     );
 
@@ -139,7 +139,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_volume(&mask.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_volume(&mask.view(), frames, None).unwrap()))
         },
     );
 
@@ -155,7 +155,7 @@ fn criterion_benchmark_read_one_mask(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_roi_volume(&mask.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_roi_flim_volume(&mask.view(), frames, Some(&reg)).unwrap()))
         },
     );
 }
@@ -166,7 +166,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
 
     //////////////////////// FLAT MASKS/////////////////
     let siffreader = corrosiff::open_siff(SHORT_SIFF_PATH).unwrap();
-    let mut read_bench = c.benchmark_group("Mask sum benchmarks");
+    let mut read_bench = c.benchmark_group("Multimask FLIM sum benchmarks");
     let frame_vec = Vec::<u64>::from_iter(0..40);
 
     let frame_dims = siffreader.image_dims().unwrap().to_tuple();
@@ -182,7 +182,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_flat(&masks.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_flat(&masks.view(), frames, None).unwrap()))
         },
     );
 
@@ -214,7 +214,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_flat(&masks.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_flat(&masks.view(), frames, Some(&reg)).unwrap()))
         },
     );
 
@@ -227,7 +227,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
             bench.iter(||
                 black_box(
                     masks.axis_iter(Axis(0)).for_each(|mask| {
-                        siffreader.sum_roi_flat(&mask, frames, Some(&reg)).unwrap();
+                        siffreader.sum_roi_flim_flat(&mask, frames, Some(&reg)).unwrap();
                     })
                 )
             )
@@ -251,7 +251,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_flat(&masks.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_flat(&masks.view(), frames, None).unwrap()))
         },
     );
 
@@ -264,7 +264,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
             bench.iter(||
                 black_box(
                     masks.axis_iter(Axis(0)).for_each(|mask| {
-                        siffreader.sum_roi_flat(&mask, frames, None).unwrap();
+                        siffreader.sum_roi_flim_flat(&mask, frames, None).unwrap();
                     })
                 )
             )
@@ -283,7 +283,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_flat(&masks.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_flat(&masks.view(), frames, Some(&reg)).unwrap()))
         },
     );
 
@@ -296,7 +296,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
             bench.iter(||
                 black_box(
                     masks.axis_iter(Axis(0)).for_each(|mask| {
-                        siffreader.sum_roi_flat(&mask, frames, Some(&reg)).unwrap();
+                        siffreader.sum_roi_flim_flat(&mask, frames, Some(&reg)).unwrap();
                     })
                 )
             )
@@ -320,7 +320,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_volume(&masks.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_volume(&masks.view(), frames, None).unwrap()))
         },
     );
 
@@ -336,7 +336,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_volume(&masks.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_volume(&masks.view(), frames, Some(&reg)).unwrap()))
         },
     );
 
@@ -357,7 +357,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_volume(&masks.view(), frames, None).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_volume(&masks.view(), frames, None).unwrap()))
         },
     );
 
@@ -373,7 +373,7 @@ fn criterion_benchmark_read_multiple_masks(c: &mut Criterion) {
         ),
         &frame_vec.as_slice(),
         |bench, frames| {
-            bench.iter(|| black_box(siffreader.sum_rois_volume(&masks.view(), frames, Some(&reg)).unwrap()))
+            bench.iter(|| black_box(siffreader.sum_rois_flim_volume(&masks.view(), frames, Some(&reg)).unwrap()))
         },
     );
 }

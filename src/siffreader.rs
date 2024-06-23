@@ -2718,6 +2718,90 @@ mod tests {
             empirical.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
         );
 
+        //////// MULTIPLE 3D ROIS NOW //////////
+
+        let mut rois = Array4::<bool>::from_elem(
+            (
+                7 as usize,
+                10 as usize,
+                reader.image_dims().unwrap().ydim as usize,
+                reader.image_dims().unwrap().xdim as usize
+            ),
+            true
+        );
+
+        rois.mapv_inplace(|_| rand::random::<bool>());
+
+        let (flim, intensity) = reader.sum_rois_flim_volume(&rois.view(), &frames, None).unwrap();
+
+        // Compare against just manually masking the intensity array
+        let intensity_from_mask = reader.sum_rois_volume(&rois.view(), &frames, None).unwrap();
+
+        assert_eq!(intensity, intensity_from_mask);
+
+        let roi_wise_sums = rois.axis_iter(Axis(0)).map(
+            |roi| {
+                let (flim, intensity) = reader.sum_roi_flim_volume(&roi, &frames, None).unwrap();
+                (flim, intensity)
+            }
+        ).collect::<Vec<_>>();
+
+        // Compare against the single roi mask method
+        izip!(
+            flim.axis_iter(Axis(1)),
+            intensity.axis_iter(Axis(1)),
+            roi_wise_sums.iter()
+        ).for_each(
+            |(flim_roiwise, intensity_roiwise,(single_roi_flim, single_roi_intensity))|
+            {
+                assert_eq!(
+                    flim_roiwise.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>(),
+                    single_roi_flim.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
+                );
+                assert_eq!(intensity_roiwise, single_roi_intensity);
+            }
+        );
+
+        // Now test with registration
+
+        let mut reg = RegistrationDict::new();
+
+        frames.iter().for_each(|&x| {
+            reg.insert(x, (rand::random::<i32>() % reader.image_dims().unwrap().ydim as i32, rand::random::<i32>() % reader.image_dims().unwrap().xdim as i32));
+        });
+
+        let (flim, intensity) = reader.sum_rois_flim_volume(&rois.view(), &frames, Some(&reg)).unwrap();
+
+        // Compare against just manually masking the intensity array
+        let intensity_from_mask = reader.sum_rois_volume(&rois.view(), &frames, Some(&reg)).unwrap();
+
+        assert_eq!(intensity, intensity_from_mask);
+
+        let roi_wise_sums = rois.axis_iter(Axis(0)).map(
+            |roi| {
+                let (flim, intensity) = reader.sum_roi_flim_volume(&roi, &frames, Some(&reg)).unwrap();
+                (flim, intensity)
+            }
+        ).collect::<Vec<_>>();
+
+        // Compare against the single roi mask method
+
+        izip!(
+            flim.axis_iter(Axis(1)),
+            intensity.axis_iter(Axis(1)),
+            roi_wise_sums.iter()
+        ).for_each(
+            |(flim_roiwise, intensity_roiwise,(single_roi_flim, single_roi_intensity))|
+            {
+                assert_eq!(
+                    flim_roiwise.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>(),
+                    single_roi_flim.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
+                );
+                assert_eq!(intensity_roiwise, single_roi_intensity);
+            }
+        );
+
+
     }
 
     #[test]

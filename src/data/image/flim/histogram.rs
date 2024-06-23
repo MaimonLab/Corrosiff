@@ -41,7 +41,7 @@ fn _load_histogram_compressed<I, ReaderT>(
     // sync is missed, like one in every several thousand pulses?
     try_cast_slice::<u8, u16>(&data).map_err(
         |err| IOError::new(IOErrorKind::InvalidData, err)
-    )?.iter().for_each(|&x| if (x < histogram.len() as u16) {histogram[x as usize] += 1});
+    )?.iter().for_each(|&x| if x < histogram.len() as u16 {histogram[x as usize] += 1});
 
     Ok(())
 }
@@ -205,7 +205,7 @@ struct ImageHistogram<D> {
 #[allow(dead_code)]
 impl<D> ImageHistogram<D> {
 
-    pub fn new_from_ifds<I : IFD>(ifds : &[&I]) -> Result<Self, CorrosiffError> {
+    pub fn new_from_ifds<I : IFD>(_ifds : &[&I]) -> Result<Self, CorrosiffError> {
         Err(CorrosiffError::NotImplementedError)
     }
 }
@@ -260,12 +260,12 @@ mod tests{
         let file_format = FileFormat::parse_filetype(&mut f).unwrap();
         let ifd_vec = file_format.get_ifd_vec(&mut f);
 
-        let mut hist = ImageHistogram {
+        let mut _hist = ImageHistogram {
             data : ArrayD::<u64>::zeros(IxDyn(&[file_format.num_flim_tau_bins().unwrap() as usize, 512, 512]))
         };
 
         let mut reader = std::io::BufReader::new(f);
-        for (i, ifd) in ifd_vec.iter().enumerate() {
+        for (_i, ifd) in ifd_vec.iter().enumerate() {
             let curr_pos = reader.stream_position().unwrap();
             reader.seek(
                 std::io::SeekFrom::Start(

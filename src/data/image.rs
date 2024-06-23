@@ -2,30 +2,31 @@
 //! 
 //! Contains the data needed for parsing file data streams
 //! into image-relevant structures.
+#![allow(unused_imports)]
 
 mod dimensions;
 mod intensity;
 mod flim;
 mod utils;
 
-pub use intensity::siff::load_array as load_array_intensity;
-pub use intensity::siff::load_array_registered as load_array_intensity_registered;
-pub use intensity::siff::sum_mask as sum_intensity_mask;
-pub use intensity::siff::sum_mask_registered as sum_intensity_mask_registered;
-pub use intensity::siff::sum_masks as sum_intensity_masks;
-pub use intensity::siff::sum_masks_registered as sum_intensity_masks_registered;
+pub (crate) use intensity::siff::load_array as load_array_intensity;
+pub (crate) use intensity::siff::load_array_registered as load_array_intensity_registered;
+pub (crate) use intensity::siff::sum_mask as sum_intensity_mask;
+pub (crate) use intensity::siff::sum_mask_registered as sum_intensity_mask_registered;
+pub (crate) use intensity::siff::sum_masks as sum_intensity_masks;
+pub (crate) use intensity::siff::sum_masks_registered as sum_intensity_masks_registered;
 
-pub use flim::histogram::load_histogram as load_histogram;
-pub use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays
+pub (crate) use flim::histogram::load_histogram as load_histogram;
+pub (crate) use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays
     as load_flim_empirical_and_intensity_arrays;
-pub use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays_registered
+pub (crate) use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays_registered
     as load_flim_empirical_and_intensity_arrays_registered;
-pub use flim::empirical_lifetime::sum_lifetime_intensity_mask;
-pub use flim::empirical_lifetime::sum_lifetime_intensity_mask_registered;
-pub use flim::empirical_lifetime::sum_lifetime_intensity_masks;
-pub use flim::empirical_lifetime::sum_lifetime_intensity_masks_registered;
+pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_mask;
+pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_mask_registered;
+pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_masks;
+pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_masks_registered;
 
-pub use dimensions::{Dimensions, DimensionsError, roll};
+pub (crate) use dimensions::{Dimensions, DimensionsError, roll};
 
 use ndarray;
 

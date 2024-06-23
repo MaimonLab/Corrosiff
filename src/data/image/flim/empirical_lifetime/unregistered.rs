@@ -163,7 +163,7 @@ pub fn _load_flim_intensity_empirical_uncompressed<T : Into<u64>>(
     Ok(())
 }
 
-#[binrw::parser(reader, endian)]
+#[binrw::parser(reader)]
 pub fn _sum_mask_empirical_intensity_raw<T : Into<u64>>(
     mask : &ArrayView2<bool>,
     lifetime_sum : &mut f64,
@@ -181,7 +181,7 @@ pub fn _sum_mask_empirical_intensity_raw<T : Into<u64>>(
             let x = photon_to_x!(*siffphoton, 0, xdim);
             *lifetime_sum += photon_to_tau_FLOAT!(*siffphoton)
                 * (mask[[y, x]] as u64 as f64);
-            *intensity_sum += (mask[[y, x]] as u64);
+            *intensity_sum += mask[[y, x]] as u64;
         }
     );
 
@@ -190,7 +190,7 @@ pub fn _sum_mask_empirical_intensity_raw<T : Into<u64>>(
     Ok(())
 }
 
-#[binrw::parser(reader, endian)]
+#[binrw::parser(reader)]
 pub fn _sum_masks_empirical_intensity_raw<T : Into<u64>>(
     masks : &ArrayView3<bool>,
     lifetime_sum : &mut ArrayViewMut1<f64>,
@@ -229,7 +229,7 @@ pub fn _sum_masks_empirical_intensity_raw<T : Into<u64>>(
     Ok(())
 }
 
-#[binrw::parser(reader, endian)]
+#[binrw::parser(reader)]
 pub fn _sum_mask_empirical_intensity_compressed<T : Into<u64>>(
     mask : &ArrayView2<bool>,
     lifetime_sum : &mut f64,
@@ -273,7 +273,7 @@ pub fn _sum_mask_empirical_intensity_compressed<T : Into<u64>>(
     Ok(())
 }
 
-#[binrw::parser(reader, endian)]
+#[binrw::parser(reader)]
 pub fn _sum_masks_empirical_intensity_compressed<T : Into<u64>>(
     masks : &ArrayView3<bool>,
     lifetime_sum : &mut ArrayViewMut1<f64>,
@@ -312,7 +312,7 @@ pub fn _sum_masks_empirical_intensity_compressed<T : Into<u64>>(
         masks.axis_iter(Axis(0)),
         intensity_sum.iter_mut(),
         lifetime_sum.iter_mut()
-    ).for_each(|(mask, mut intensity_accumulator, mut lifetime_accumulator)| {
+    ).for_each(|(mask, intensity_accumulator, lifetime_accumulator)| {
         let mut lifetime_pointer : usize = 0;
         intensity_data.iter().zip(mask.iter()).for_each(|(intensity, maskpx)| {
             *intensity_accumulator += (*intensity as u64) * (*maskpx as u64);

@@ -1,3 +1,5 @@
+TODO write this up better. This is still pretty chaotic.
+
 # Benchmarking
 
 This section compares the `Rust` and

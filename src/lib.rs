@@ -303,7 +303,7 @@ pub fn get_frames(
 /// ```
 pub fn siff_to_tiff(
     filename : & str,
-    mode : TiffMode,
+    _mode : TiffMode,
     save_path : Option<&String>,
     ) -> IOResult<()>{
 
@@ -444,7 +444,7 @@ pub extern "C" fn get_frames_extern(
     let frames = unsafe {
         std::slice::from_raw_parts(frames, len)
     };
-    let frames = frames.to_vec();
+    let _frames = frames.to_vec();
     reader.filename();
     0
     //0;

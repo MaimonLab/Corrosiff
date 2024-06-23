@@ -3,6 +3,8 @@
 //! why did I bother using all this `binrw` stuff to begin
 //! with??
 
+#![allow(unused_imports)]
+
 use binrw::io::{Read, Seek};
 use bytemuck::try_cast_slice;
 use ndarray::prelude::*;
@@ -43,7 +45,7 @@ mod registered;
 mod unregistered;
 mod siff_frame;
 
-pub use siff_frame::SiffFrame;
+pub (crate) use siff_frame::SiffFrame;
 
 
 /// Parses a raw `.siff` format frame and returns
