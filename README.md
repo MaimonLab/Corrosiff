@@ -62,6 +62,10 @@ Haven't had any problems yet, so I'm not sure what to put here!
 # Testing
 ----------
 
+This is not really resolved -- right now I run all the tests on
+local files from my computer! I'm working on hosting remote files
+to download and test automatically! I'm just still learning this stuff..
+
 The main modules have several tests built in. From the main
 directory `corrosiff`, run
 
