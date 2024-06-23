@@ -33,6 +33,14 @@ it and install it yourself!
 
 First clone the repository:
 
+```
+git clone git@github.com:MaimonLab/Corrosiff.git
+```
+
+then navigate to the directory containing the repository. You can then
+build it with
+`cargo build --release`, providing libraries for use by other `Rust`
+code (such as the `corrosiffpy` package).
 
 
 # Sections
@@ -49,8 +57,22 @@ First clone the repository:
 # Troubleshooting
 ------------------
 
+Haven't had any problems yet, so I'm not sure what to put here!
+
 # Testing
 ----------
+
+The main modules have several tests built in. From the main
+directory `corrosiff`, run
+
+```
+cargo test
+```
+
+and it will run the test suite and print the results.
+
+If any of the tests fail, let me (SCT) know and I'll do my best
+to address the problems.
 
 ## Benchmarking
 
@@ -60,5 +82,5 @@ make up for my poor `C/C++` skills. Some of the
 module were slow -- much slower than I'd like. So
 I decided I'd learn `Rust` and see how that changes.
 
-This section documents the difference in speed between
-the two on the tests explored in the `benches` directory.
+This section documents the speed on the computers
+I've tested so far.
