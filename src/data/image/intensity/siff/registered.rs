@@ -7,12 +7,9 @@ use std::io::{
 };
 
 use crate::data::image::{
-    intensity::siff::unregistered::load_array_compressed_siff,
     dimensions::{
-        macros::*,
-        roll_inplace,
-        roll
-    },
+        macros::*, roll_inplace
+    }, intensity::siff::unregistered::load_array_compressed_siff, utils::photonwise_op
 };
 
 
@@ -53,23 +50,20 @@ pub fn load_array_raw_siff_registered<T : Into<u64>> (
     xdim : u32,
     registration : (i32, i32),
     ) -> binrw::BinResult<()> {
-    
-    // let bytes = strip_bytes.into();
-    // let mut data: Vec<u8> = vec![0; (8*((bytes/8) as usize)) as usize];
-    let mut data: Vec<u8> = vec![0; strip_bytes.into() as usize];
-    reader.read_exact(&mut data)?;
+        
+    photonwise_op!(
+        reader,
+        strip_bytes,
+        |siffphoton : &u64| {
+            array[
+                [
+                    photon_to_y!(siffphoton, registration.0, ydim),
+                    photon_to_x!(siffphoton, registration.1, xdim),
+                ]
+            ]+=1;
+        }
+    );
 
-    try_cast_slice::<u8, u64>(&data)
-    .map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?.iter().for_each(|siffphoton : &u64| {
-        array[
-            [
-                photon_to_y!(siffphoton, registration.0, ydim),
-                photon_to_x!(siffphoton, registration.1, xdim),
-            ]
-        ]+=1;
-    });
     Ok(())
 }
 
@@ -82,23 +76,50 @@ pub fn sum_mask_raw_siff_registered<T : Into<u64>>(
     xdim : u32,
     registration : (i32, i32),
 ) -> binrw::BinResult<()> {
-    // let bytes = strip_bytes.into();
-    // let mut data: Vec<u8> = vec![0; (8*((bytes/8) as usize)) as usize];
 
-    let mut data: Vec<u8> = vec![0; strip_bytes.into() as usize];
-    reader.read_exact(&mut data)?;
+    photonwise_op!(
+        reader,
+        strip_bytes,
+        |siffphoton| {
+            *frame_sum += mask[
+                [
+                    photon_to_y!(siffphoton, registration.0, ydim),
+                    photon_to_x!(siffphoton, registration.1, xdim),
+                ]
+            ] as u64;
+        }
+    );
 
-    try_cast_slice::<u8, u64>(&data)
-    .map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?.iter().for_each(|siffphoton : &u64| {
-        *frame_sum += mask[
-            [
-                photon_to_y!(siffphoton, registration.0, ydim),
-                photon_to_x!(siffphoton, registration.1, xdim),
-            ]
-        ] as u64;
-    });
+    Ok(())
+}
+
+#[binrw::parser(reader)]
+pub fn sum_masks_raw_siff_registered<T : Into<u64>>(
+    frame_sums : &mut ArrayViewMut1<u64>,
+    masks : &ArrayView3<bool>,
+    strip_bytes : T,
+    ydim : u32,
+    xdim : u32,
+    registration : (i32, i32),
+) -> binrw::BinResult<()> {
+    
+    photonwise_op!(
+        reader,
+        strip_bytes,
+        |siffphoton| {
+            masks.axis_iter(Axis(0)).zip(frame_sums.iter_mut()).for_each(
+                |(mask, mask_sum)| {
+                    *mask_sum += mask[
+                        [
+                            photon_to_y!(siffphoton, registration.0, ydim),
+                            photon_to_x!(siffphoton, registration.1, xdim),
+                        ]
+                    ] as u64;
+                }
+            )
+        }
+    );
+
     Ok(())
 }
 
@@ -149,5 +170,44 @@ pub fn sum_mask_compressed_siff_registered(
         *frame_sum += (d as u64) * (*m as u64);
     });
 
+    Ok(())
+}
+
+#[binrw::parser(reader)]
+pub fn sum_masks_compressed_siff_registered(
+    frame_sums : &mut ArrayViewMut1<u64>,
+    masks : &ArrayView3<bool>,
+    ydim : u32,
+    xdim : u32,
+    registration : (i32, i32),
+) -> binrw::BinResult<()> {
+    
+    reader.seek(std::io::SeekFrom::Current(
+        -(ydim as i64 * xdim as i64 * std::mem::size_of::<u16>() as i64)
+    ))?;
+    
+    let mut data : Vec<u8> = vec![0; 
+        ydim as usize * xdim as usize * std::mem::size_of::<u16>()
+    ];
+    reader.read_exact(&mut data)?;
+
+    let data = try_cast_slice::<u8, u16>(&data).map_err(|err| binrw::Error::Io(
+        IOError::new(IOErrorKind::InvalidData, err))
+    )?;
+
+    let mut data = Array2::<u16>::from_shape_vec((ydim as usize, xdim as usize), data.to_vec()).unwrap();
+
+    roll_inplace(&mut data.view_mut(), registration);
+    
+    // Seems bad to iterate over data N times!!
+    masks.axis_iter(Axis(0)).zip(frame_sums.iter_mut()).for_each(
+        |(mask, mask_sum)| {
+            data.iter().zip(mask.iter()).for_each(
+                |(&d, mask_px)| {
+                    *mask_sum += (d as u64) * (*mask_px as u64);
+                }
+            )
+        }
+    );
     Ok(())
 }

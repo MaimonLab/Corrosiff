@@ -15,7 +15,7 @@
 
 use std::{
     io::Result as IOResult,
-    path::PathBuf,
+    path::{Path,PathBuf},
     fs::File,
     collections::HashMap,
 };
@@ -31,7 +31,7 @@ use crate::data::image::DimensionsError;
 pub mod metadata;
 pub mod siffreader;
 
-pub use siffreader::SiffReader;
+pub use siffreader::{SiffReader, RegistrationDict};
 pub use utils::FramesError;
 pub use metadata::FrameMetadata;
 pub use data::time::ClockBase;
@@ -144,7 +144,7 @@ impl TiffMode {
 /// use corrosiff::open_siff;
 /// let reader = open_siff("file.siff");
 /// ```
-pub fn open_siff(filename : &str) -> IOResult<siffreader::SiffReader> {
+pub fn open_siff<P : AsRef<Path>>(filename : P) -> IOResult<siffreader::SiffReader> {
     SiffReader::open(filename)
 }
 

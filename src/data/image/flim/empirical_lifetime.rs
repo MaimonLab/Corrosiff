@@ -1,7 +1,25 @@
 //! Methods in this submodule deal with extracting a pixelwise or ROI-wide
 //! empirical lifetime from the data stored in a frame of a `.siff` file.
 use binrw::io::{Read, Seek};
-use registered::{_load_flim_intensity_empirical_compressed_registered, _load_flim_intensity_empirical_uncompressed_registered};
+use registered::{
+    _load_flim_intensity_empirical_compressed_registered,
+    _load_flim_intensity_empirical_uncompressed_registered,
+    _sum_mask_empirical_intensity_compressed_registered,
+    _sum_mask_empirical_intensity_raw_registered,
+    _sum_masks_empirical_intensity_compressed_registered,
+    _sum_masks_empirical_intensity_raw_registered,
+};
+use unregistered::{
+    _load_flim_intensity_empirical_compressed,
+    _load_flim_intensity_empirical_uncompressed,
+    _load_flim_array_empirical_uncompressed,
+    _load_flim_array_empirical_compressed,
+    _sum_mask_empirical_intensity_compressed,
+    _sum_mask_empirical_intensity_raw,
+    _sum_masks_empirical_intensity_compressed,
+    _sum_masks_empirical_intensity_raw,
+};
+
 use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 use ndarray::prelude::*;
 use crate::{
@@ -11,13 +29,7 @@ use crate::{
         Tag,
     },
     CorrosiffError,
-    data::image::
-        flim::empirical_lifetime::unregistered::{
-            _load_flim_array_empirical_uncompressed,
-            _load_flim_array_empirical_compressed,
-            _load_flim_intensity_empirical_compressed,
-            _load_flim_intensity_empirical_uncompressed,
-        },
+    data::image::utils::load_array_from_siff,
 };
 
 mod unregistered;
@@ -64,43 +76,29 @@ fn _load_flim_array_empirical<ReaderT, I>(
     ifd : &I,
     array : &mut ArrayViewMut2<f64>
     ) -> Result<(), CorrosiffError> where I : IFD, ReaderT : Read + Seek {
-    let pos = reader.stream_position()?;
 
-    reader.seek(std::io::SeekFrom::Start(ifd.get_tag(StripOffsets)
-        .ok_or(IOError::new(IOErrorKind::InvalidData, "Strip offset not found"))?
-        .value().into()
-    ))?;
-
-    match ifd.get_tag(Siff).unwrap().value().into() {
-        0 => {
-            _load_flim_array_empirical_uncompressed(
-                reader,
-                binrw::Endian::Little, 
-                (
-                    &mut array.view_mut(),
-                    ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                ))?;
-        },
-        1 => {
-            _load_flim_array_empirical_compressed(
-                reader,
-                binrw::Endian::Little, 
-                (
-                    &mut array.view_mut(),
-                    ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                ))?;
-        },
-        _ => {
-            Err(IOError::new(IOErrorKind::InvalidData, "Invalid Siff tag value"))?;
-        }
-    }
-
-    let _ = reader.seek(std::io::SeekFrom::Start(pos))?;
-    Ok(())
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _load_flim_array_empirical_uncompressed,
+            (
+                &mut array.view_mut(),
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        ),
+        (
+            _load_flim_array_empirical_compressed,
+            (
+                &mut array.view_mut(),
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        )
+    )
 }
 
 /// Loads intensity and empirical lifetime arrays from the frame
@@ -132,44 +130,31 @@ pub fn load_flim_empirical_and_intensity_arrays<I: IFD, ReaderT : Read + Seek>(
     lifetime : &mut ArrayViewMut2<f64>,
     intensity : &mut ArrayViewMut2<u16>,
     ) -> Result<(), CorrosiffError> {
-    let pos = reader.stream_position()?;
-    reader.seek(std::io::SeekFrom::Start(ifd.get_tag(StripOffsets)
-        .ok_or(IOError::new(IOErrorKind::InvalidData, "Strip offset not found"))?
-        .value().into()
-    ))?;
 
-    match ifd.get_tag(Siff).unwrap().value().into() {
-        0 => {
-            _load_flim_intensity_empirical_uncompressed(
-                reader,
-                binrw::Endian::Little, 
-                (
-                    &mut lifetime.view_mut(),
-                    &mut intensity.view_mut(),
-                    ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                ))?;
-        },
-        1 => {
-            _load_flim_intensity_empirical_compressed(
-                reader,
-                binrw::Endian::Little, 
-                (
-                    &mut lifetime.view_mut(),
-                    &mut intensity.view_mut(),
-                    ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                ))?;
-        },
-        _ => {
-            Err(IOError::new(IOErrorKind::InvalidData, "Invalid Siff tag value"))?;
-        }
-    }
-
-    let _ = reader.seek(std::io::SeekFrom::Start(pos))?;
-    Ok(())
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _load_flim_intensity_empirical_uncompressed,
+            (
+                &mut lifetime.view_mut(),
+                &mut intensity.view_mut(),
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        ),
+        (
+            _load_flim_intensity_empirical_compressed,
+            (
+                &mut lifetime.view_mut(),
+                &mut intensity.view_mut(),
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        )
+    )
 }
 
 pub fn load_flim_empirical_and_intensity_arrays_registered
@@ -180,46 +165,207 @@ pub fn load_flim_empirical_and_intensity_arrays_registered
     intensity : &mut ArrayViewMut2<u16>,
     registration : (i32, i32),
     ) -> Result<(), CorrosiffError> {
-    let pos = reader.stream_position()?;
-    reader.seek(std::io::SeekFrom::Start(ifd.get_tag(StripOffsets)
-        .ok_or(IOError::new(IOErrorKind::InvalidData, "Strip offset not found"))?
-        .value().into()
-    ))?;
+    
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _load_flim_intensity_empirical_uncompressed_registered,
+            (
+                &mut lifetime.view_mut(),
+                &mut intensity.view_mut(),
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        ),
+        (
+            _load_flim_intensity_empirical_compressed_registered,
+            (
+                &mut lifetime.view_mut(),
+                &mut intensity.view_mut(),
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        )
+    )
+}
 
-    match ifd.get_tag(Siff).unwrap().value().into() {
-        0 => {
-            _load_flim_intensity_empirical_uncompressed_registered(
-                reader,
-                binrw::Endian::Little, 
-                (
-                    &mut lifetime.view_mut(),
-                    &mut intensity.view_mut(),
-                    ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                    registration,
-                ))?;
-        },
-        1 => {
-            _load_flim_intensity_empirical_compressed_registered(
-                reader,
-                binrw::Endian::Little, 
-                (
-                    &mut lifetime.view_mut(),
-                    &mut intensity.view_mut(),
-                    ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                    registration,
-                ))?;
-        },
-        _ => {
-            Err(IOError::new(IOErrorKind::InvalidData, "Invalid Siff tag value"))?;
-        }
-    }
+/// Applies a mask to the frame of interest and computes the empirical
+/// lifetime across all pixels in the mask and the total intensity
+/// within the mask, loading the arguments provided in place.
+/// 
+/// ## Arguments
+/// 
+/// * `reader` - The reader with access to the siff file (implements
+/// `Read` + `Seek`)
+/// 
+/// * `ifd` - The IFD pointing to the frame to load the lifetime and intensity
+/// data from
+/// 
+/// * `lifetime` - The value to load the computed lifetime into
+/// 
+/// * `intensity` - The value to load the computed intensity into
+/// 
+/// * `roi` - The mask to apply to the frame
+/// 
+/// ## Example
+/// 
+/// ```rust, ignore
+/// use ndarray::prelude::*;
+/// use std::fs::File;
+/// TODO:
+/// ```
+/// 
+/// 
+pub fn sum_lifetime_intensity_mask< I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    lifetime : &mut f64,
+    intensity : &mut u64,
+    roi : &ArrayView2<bool>,
+) -> Result<(), CorrosiffError>{
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _sum_mask_empirical_intensity_raw,
+            (   
+                &roi,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        ),
+        (
+            _sum_mask_empirical_intensity_compressed,
+            (
+                &roi,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        )
+    )
+}
 
-    let _ = reader.seek(std::io::SeekFrom::Start(pos))?;
-    Ok(())
+pub fn sum_lifetime_intensity_mask_registered< I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    lifetime : &mut f64,
+    intensity : &mut u64,
+    roi : &ArrayView2<bool>,
+    registration : (i32, i32),
+) -> Result<(), CorrosiffError>{
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _sum_mask_empirical_intensity_raw_registered,
+            (   
+                &roi,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        ),
+        (
+            _sum_mask_empirical_intensity_compressed_registered,
+            (
+                &roi,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        )
+    )
+}
+
+pub fn sum_lifetime_intensity_masks< I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    lifetime : &mut ArrayViewMut1<f64>,
+    intensity : &mut ArrayViewMut1<u64>,
+    rois : &ArrayView3<bool>,
+) -> Result<(), CorrosiffError>{
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _sum_masks_empirical_intensity_raw,
+            (   
+                &rois,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        ),
+        (
+            _sum_masks_empirical_intensity_compressed,
+            (
+                &rois,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        )
+    )
+}
+
+
+pub fn sum_lifetime_intensity_masks_registered< I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    lifetime : &mut ArrayViewMut1<f64>,
+    intensity : &mut ArrayViewMut1<u64>,
+    rois : &ArrayView3<bool>,
+    registration : (i32, i32),
+) -> Result<(), CorrosiffError>{
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _sum_masks_empirical_intensity_raw_registered,
+            (   
+                &rois,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        ),
+        (
+            _sum_masks_empirical_intensity_compressed_registered,
+            (
+                &rois,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).unwrap().value().into(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        )
+    )
 }
 
 /// Internal structure for testing and validating

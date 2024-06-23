@@ -9,10 +9,16 @@ use std::io::{
     ErrorKind as IOErrorKind,
 };
 
-use crate::{tiff::{
+use crate::{
+    tiff::{
     Tag, TiffTagID::{Siff, StripByteCounts, StripOffsets }, IFD
-}, CorrosiffError};
-use crate::data::image::dimensions::macros::*;
+    },
+    CorrosiffError
+};
+use crate::data::image::{
+    utils::load_array_from_siff,
+    dimensions::macros::*
+};
 
 /// Reads the data pointed to by the IFD and uses it to
 /// increment the counts of the histogram. Presumes
@@ -52,12 +58,22 @@ fn _load_histogram_uncompressed<I, ReaderT>(
     let mut data : Vec<u8> = vec![0; strip_byte_counts.into() as usize];
     reader.read_exact(&mut data)?;
 
-    try_cast_slice::<u8, u64>(&data).map_err(
-        |err| IOError::new(IOErrorKind::InvalidData, err)
-    )?.iter().for_each(|&x| {
-        let tau = photon_to_tau_USIZE!(x);
-        if tau < histogram.len() {histogram[tau] += 1}
-    });
+    let hlen = histogram.len();
+
+    unsafe {
+        let (_, data, _) = data.align_to::<u64>();
+        data.iter().for_each(|&x| {
+            let tau = photon_to_tau_USIZE!(x);
+            histogram[tau % hlen] += 1;
+        });
+    }
+
+    // try_cast_slice::<u8, u64>(&data).map_err(
+    //     |err| IOError::new(IOErrorKind::InvalidData, err)
+    // )?.iter().for_each(|&x| {
+    //     let tau = photon_to_tau_USIZE!(x);
+    //     if tau < histogram.len() {histogram[tau] += 1}
+    // });
     Ok(())
 }
 
@@ -92,6 +108,7 @@ fn _load_histogram_uncompressed<I, ReaderT>(
 pub fn load_histogram<I, ReaderT>(
     ifd: &I, reader: &mut ReaderT, histogram : &mut ArrayViewMut1<u64>
     )-> Result<(), IOError> where I : IFD, ReaderT : Read + Seek {
+
     let curr_pos = reader.stream_position()?;
     reader.seek(
         std::io::SeekFrom::Start(

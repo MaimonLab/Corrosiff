@@ -282,6 +282,10 @@ impl Dimensions {
         }
     }
 
+    pub fn num_el(&self) -> u64 {
+        self.xdim * self.ydim
+    }
+
     /// Creates a `Dimensions` struct from
     /// a tuple (y, x)
     pub fn from_tuple((y, x) : (usize, usize)) -> Dimensions {

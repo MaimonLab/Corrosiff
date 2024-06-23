@@ -270,4 +270,22 @@ macro_rules! parallelize_op {
     };
 }
 
+/// Not sure if I'm going to use this, seems like
+/// too small a bit of code to bother wrapping in a
+/// macro, though it feels repetitive.
+macro_rules! _registration_dependent_op {
+    ($registration : ident, $some_op : expr, $none_op : expr) => {
+        match $registration {
+            Some(reg) => {
+                $some_op
+            },
+            None => {
+                $none_op
+            }
+        }
+        Ok(())
+    };
+}
+
 pub (crate) use parallelize_op;
+//pub (crate) use _registration_dependent_op;

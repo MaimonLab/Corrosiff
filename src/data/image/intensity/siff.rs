@@ -17,22 +17,27 @@ use crate::tiff::{
     Tag,
     TiffTagID::{StripOffsets, StripByteCounts, Siff, },
 };
-use crate::data::image::
+use crate::data::image::{
+    utils::load_array_from_siff,
     intensity::siff::{
         registered::{
             load_array_raw_siff_registered,
             load_array_compressed_siff_registered,
             sum_mask_raw_siff_registered,
+            sum_masks_raw_siff_registered,
             sum_mask_compressed_siff_registered,
+            sum_masks_compressed_siff_registered,
         },
         unregistered::{
             load_array_raw_siff,
             load_array_compressed_siff,
             sum_mask_raw_siff,
             sum_mask_compressed_siff,
+            sum_masks_raw_siff,
+            sum_masks_compressed_siff,
         },
     }
-;
+};
 
 mod registered;
 mod unregistered;
@@ -118,47 +123,29 @@ pub fn load_array<'a, ReaderT, I>(
         reader : &'a mut ReaderT,
         ifd : &'a I,
         array : &'a mut ArrayViewMut2<u16>
-    ) -> Result<(), IOError> where I : IFD, ReaderT : Read + Seek
-    {
-    let pos = reader.stream_position()?;
-    reader.seek(
-        std::io::SeekFrom::Start(
-            ifd.get_tag(StripOffsets)
-            .ok_or(
-                IOError::new(IOErrorKind::InvalidData, 
-                "Strip offset not found"
-                )
-            )?.value().into()
-        )
-    )?;
-
-    match ifd.get_tag(Siff).unwrap().value().into() {
-        0 => {
-            load_array_raw_siff(reader, binrw::Endian::Little, 
-                (&mut array.view_mut(),
+    ) -> Result<(), IOError> where I : IFD, ReaderT : Read + Seek{
+    
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            load_array_raw_siff,
+            (
+                &mut array.view_mut(),
                 ifd.get_tag(StripByteCounts).unwrap().value(),
                 ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
-                )
+                ifd.width().unwrap().into() as u32
             )
-        },
-        1 => {
-            load_array_compressed_siff(reader, binrw::Endian::Little,
-                (&mut array.view_mut(),
+        ),
+        (
+            load_array_compressed_siff,
+            (
+                &mut array.view_mut(),
                 ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
-                )
+                ifd.width().unwrap().into() as u32
             )
-        },
-        _ => {
-            Err(binrw::Error::Io(IOError::new(IOErrorKind::InvalidData,
-                "Invalid Siff tag"
-                )
-            ))
-        }
-    }.map_err(|err| IOError::new(IOErrorKind::InvalidData, err))?;
-    reader.seek(std::io::SeekFrom::Start(pos))?;
-    Ok(())
+        )
+    )
 }
 
 /// Loads an allocated array with data read directly
@@ -207,52 +194,29 @@ pub fn load_array_registered<'a, T, S>(
     registration : (i32, i32),    
 ) -> Result<(), IOError> where S : IFD, T : Read + Seek {
     
-    let pos = reader.stream_position()?;
-    
-    reader.seek(
-        std::io::SeekFrom::Start(
-            ifd.get_tag(StripOffsets)
-            .ok_or(
-                IOError::new(IOErrorKind::InvalidData, 
-                "Strip offset not found"
-                )
-            )?.value().into()
-        )
-    )?;
-
-    match ifd.get_tag(Siff).unwrap().value().into() {
-        0 => {
-            load_array_raw_siff_registered(reader, binrw::Endian::Little, 
-                (&mut array.view_mut(),
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            load_array_raw_siff_registered,
+            (
+                &mut array.view_mut(),
                 ifd.get_tag(StripByteCounts).unwrap().value(),
                 ifd.height().unwrap().into() as u32,
                 ifd.width().unwrap().into() as u32,
-                registration,
-                )
+                registration
             )
-        },
-        1 => {
-            load_array_compressed_siff_registered(reader, binrw::Endian::Little,
-                (&mut array.view_mut(),
+        ),
+        (
+            load_array_compressed_siff_registered,
+            (
+                &mut array.view_mut(),
                 ifd.height().unwrap().into() as u32,
                 ifd.width().unwrap().into() as u32,
-                registration,
-                )
+                registration
             )
-        },
-        _ => {
-            Err(binrw::Error::Io(IOError::new(IOErrorKind::InvalidData,
-                "Invalid Siff tag"
-                )
-            ))
-        }
-    }.map_err(|err| {
-        let _ = reader.seek(std::io::SeekFrom::Start(pos));
-        IOError::new(IOErrorKind::InvalidData, err)
-    })?;
-
-    reader.seek(std::io::SeekFrom::Start(pos))?;
-    Ok(())
+        )
+    )
 }
 
 /// Sums all pixels in the requested frame that are
@@ -295,55 +259,30 @@ pub fn sum_mask<I : IFD, ReaderT : Read + Seek>(
     frame_sum : &mut u64,
     mask : &ArrayView2<bool>,
 ) -> Result<(), IOError> {
-    
-    let pos = reader.stream_position()?;
-    
-    reader.seek(
-        std::io::SeekFrom::Start(
-            ifd.get_tag(StripOffsets)
-            .ok_or(
-                IOError::new(IOErrorKind::InvalidData, 
-                "Strip offset not found"
-                )
-            )?.value().into()
+
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            sum_mask_raw_siff,
+            (
+                frame_sum,
+                &mask.view(),
+                ifd.get_tag(StripByteCounts).unwrap().value(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        ),
+        (
+            sum_mask_compressed_siff,
+            (
+                frame_sum,
+                &mask.view(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
         )
-    )?;
-
-    match ifd.get_tag(Siff).unwrap().value().into() {
-        0 => {
-            sum_mask_raw_siff(reader, binrw::Endian::Little, 
-                (
-                    frame_sum,
-                    &mask.view(),
-                    ifd.get_tag(StripByteCounts).unwrap().value(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                )
-            )
-        },
-        1 => {
-            sum_mask_compressed_siff(reader, binrw::Endian::Little,
-                (
-                    frame_sum,
-                    &mask.view(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                )
-            )
-        },
-        _ => {
-            Err(binrw::Error::Io(IOError::new(IOErrorKind::InvalidData,
-                "Invalid Siff tag"
-                )
-            ))
-        }
-    }.map_err(|err| {
-        let _ = reader.seek(std::io::SeekFrom::Start(pos));
-        IOError::new(IOErrorKind::InvalidData, err)
-    })?;
-
-    reader.seek(std::io::SeekFrom::Start(pos))?;
-    Ok(())
+    )
 }
 
 pub fn sum_mask_registered<I : IFD, ReaderT : Read + Seek>(
@@ -354,56 +293,178 @@ pub fn sum_mask_registered<I : IFD, ReaderT : Read + Seek>(
     registration : (i32, i32),
 ) -> Result<(), IOError> {
     
-    let pos = reader.stream_position()?;
-    
-    reader.seek(
-        std::io::SeekFrom::Start(
-            ifd.get_tag(StripOffsets)
-            .ok_or(
-                IOError::new(IOErrorKind::InvalidData, 
-                "Strip offset not found"
-                )
-            )?.value().into()
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            sum_mask_raw_siff_registered,
+            (
+                frame_sum,
+                &mask.view(),
+                ifd.get_tag(StripByteCounts).unwrap().value(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        ),
+        (
+            sum_mask_compressed_siff_registered,
+            (
+                frame_sum,
+                &mask.view(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
         )
-    )?;
+    )
+}
 
-    match ifd.get_tag(Siff).unwrap().value().into() {
-        0 => {
-            sum_mask_raw_siff_registered(reader, binrw::Endian::Little, 
-                (
-                    frame_sum,
-                    &mask.view(),
-                    ifd.get_tag(StripByteCounts).unwrap().value(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                    registration,
-                )
-            )
-        },
-        1 => {
-            sum_mask_compressed_siff_registered(reader, binrw::Endian::Little,
-                (
-                    frame_sum,
-                    &mask.view(),
-                    ifd.height().unwrap().into() as u32,
-                    ifd.width().unwrap().into() as u32,
-                    registration,
-                )
-            )
-        },
-        _ => {
-            Err(binrw::Error::Io(IOError::new(IOErrorKind::InvalidData,
-                "Invalid Siff tag"
-                )
-            ))
-        }
-    }.map_err(|err| {
-        let _ = reader.seek(std::io::SeekFrom::Start(pos));
-        IOError::new(IOErrorKind::InvalidData, err)
-    })?;
+/// Sums all pixels in the requested frame that are
+/// for each mask in the `mask` array's slow dimension
+/// and stores each sum in the `frame_sums` argument.
+/// 
+/// ## Arguments
+/// 
+/// * `reader` - Any reader of a `.siff` file
+/// 
+/// * `ifd` - The IFD of the frame to load into
+/// 
+/// * `frame_sums` - An array of size `mask.dims().0`
+/// 
+/// * `masks` - The masks to apply to the frame
+/// 
+/// ## Example
+/// 
+/// ```rust, ignore
+/// use ndarray::prelude::*;
+/// use std::fs::File;
+/// 
+/// let mut frame_sum = Array1::<u64>::zeros(6);
+/// let mut masks = Array3::<bool>::zeros((6,512, 512));
+/// 
+/// let mut reader = File::open("file.siff").unwrap());
+/// // *- snip - *  get ifd for the frame of interest //
+/// 
+/// sum_masks(&mut reader, &ifd, &mut frame_sum, &mask.view());
+/// ```
+/// 
+/// ## See also
+/// 
+/// - `sum_masks_registered` - for summing the intensity
+/// data of a frame with registration
+pub fn sum_masks<I : IFD, ReaderT: Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    frame_sums : &mut ArrayViewMut1<u64>,
+    masks : &ArrayView3<bool>,
+) -> Result<(), IOError> {
 
-    reader.seek(std::io::SeekFrom::Start(pos))?;
-    Ok(())
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            sum_masks_raw_siff,
+            (
+                &mut frame_sums.view_mut(),
+                &masks.view(),
+                ifd.get_tag(StripByteCounts).unwrap().value(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        ),
+        (
+            sum_masks_compressed_siff,
+            (
+                &mut frame_sums.view_mut(),
+                &masks.view(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        )
+    )
+}
+
+
+/// Sums all pixels in the requested frame that are
+/// for each mask in the `mask` array's slow dimension
+/// and stores each sum in the `frame_sums` argument.
+/// 
+/// ## Arguments
+/// 
+/// * `reader` - Any reader of a `.siff` file
+/// 
+/// * `ifd` - The IFD of the frame to load into
+/// 
+/// * `frame_sums` - An array of size `mask.dims().0`
+/// 
+/// * `masks` - The masks to apply to the frame
+/// 
+/// * `registration` - A tuple of the pixelwise shifts
+/// to register the frame. The first element is the
+/// shift in the y direction, and the second element
+/// is the shift in the x direction. The shifts are
+/// in the direct of the shift itself, i.e. a positive
+/// registration in the y direction will shift the frame down.
+/// 
+/// 
+/// ## Example
+/// 
+/// ```rust, ignore
+/// use ndarray::prelude::*;
+/// use std::fs::File;
+/// use std::collections::HashMap;
+/// 
+/// let mut frame_sum = Array1::<u64>::zeros(6);
+/// let mut masks = Array3::<bool>::zeros((6,512, 512));
+/// 
+/// let mut reader = File::open("file.siff").unwrap());
+/// // *- snip - *  get ifd for the frame of interest //
+/// 
+/// let registration = HashMap::<u64, (i32, i32)>::new();
+/// 
+/// registration.insert(ifd_idx, (2, 2));
+/// 
+/// sum_masks_registered(&mut reader, &ifd, &mut frame_sum, &mask.view(), registration);
+/// ```
+/// 
+/// ## See also
+/// 
+/// - `sum_masks`` - for summing the intensity
+/// data of a frame without registration (faster)
+pub fn sum_masks_registered<I : IFD, ReaderT: Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    frame_sums : &mut ArrayViewMut1<u64>,
+    masks : &ArrayView3<bool>,
+    registration : (i32, i32),
+) -> Result<(), IOError> {
+
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            sum_masks_raw_siff_registered,
+            (
+                &mut frame_sums.view_mut(),
+                &masks.view(),
+                ifd.get_tag(StripByteCounts).unwrap().value(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        ),
+        (
+            sum_masks_compressed_siff_registered,
+            (
+                &mut frame_sums.view_mut(),
+                &masks.view(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        )
+    )
 }
 
 #[cfg(test)]

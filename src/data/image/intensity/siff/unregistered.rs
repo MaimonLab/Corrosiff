@@ -1,4 +1,4 @@
-use bytemuck::{try_cast_slice};
+use bytemuck::try_cast_slice;
 use ndarray::prelude::*;
 
 use std::io::{
@@ -6,8 +6,10 @@ use std::io::{
     ErrorKind as IOErrorKind,
 };
 
-use crate::data::image::dimensions::macros::*;
-
+use crate::data::image::{
+    utils::photonwise_op,
+    dimensions::macros::*
+};
 
 /// Loads an allocated array with data read from a raw
 /// `.siff` format frame (presumes the `reader` argument already
@@ -29,7 +31,7 @@ use crate::data::image::dimensions::macros::*;
 /// let mut array = Array2::<u16>::zeros((512, 512));
 /// let mut reader = BufReader::new(std::fs::File::open("file.siff").unwrap());
 /// reader.seek(std::io::SeekFrom::Start(34238)).unwrap();
-/// load_array_raw_siff(&mut array, 512*512*2, 512, 512);
+/// load_array_raw_s&iff(mut array, 512*512*2, 512, 512);
 /// ```
 /// 
 /// # See also
@@ -43,23 +45,20 @@ pub fn load_array_raw_siff<T : Into<u64>>(
         ydim : u32,
         xdim : u32,
     ) -> binrw::BinResult<()> {
+
+    photonwise_op!(
+        reader,
+        strip_bytes,
+        |photon : &u64| {
+            array[
+                [
+                    photon_to_y!(photon, 0, ydim),
+                    photon_to_x!(photon, 0, xdim),
+                ]
+            ] += 1;
+        }
+    );
     
-    // let bytes = strip_bytes.into();
-    // let mut data: Vec<u8> = vec![0; (8*((bytes/8) as usize)) as usize];
-
-    let mut data = vec![0; strip_bytes.into() as usize];
-    reader.read_exact(&mut data)?;
-
-    try_cast_slice::<u8, u64>(&data)
-    .map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?.iter().for_each(|siffphoton : &u64| {
-        array[
-            [photon_to_y!(siffphoton, 0 , ydim),
-            photon_to_x!(siffphoton, 0, xdim),
-            ]
-        ]+=1;
-    });
     Ok(())
 }
 
@@ -75,25 +74,47 @@ pub fn sum_mask_raw_siff<T : Into<u64>>(
     xdim : u32,
 ) -> binrw::BinResult<()> {
     
-    // let bytes = strip_bytes.into();
-    // let mut data: Vec<u8> = vec![0; (8*((bytes/8) as usize)) as usize];
-
-    let mut data = vec![0; strip_bytes.into() as usize];
-    reader.read_exact(&mut data)?;
-
-    try_cast_slice::<u8, u64>(&data)
-    .map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?.iter().for_each(|siffphoton : &u64| {
-        *frame_sum += mask[
-            (photon_to_y!(siffphoton, 0 , ydim),
-            photon_to_x!(siffphoton, 0, xdim),)
-        ] as u64
-    });
+    photonwise_op!(
+        reader,
+        strip_bytes,
+        |siffphoton : &u64| {
+            *frame_sum += mask[
+                (photon_to_y!(siffphoton, 0 , ydim),
+                photon_to_x!(siffphoton, 0, xdim),)
+            ] as u64
+        }
+    );
 
     Ok(())
 }
- 
+
+/// Iterates over all the masks for each pixel
+#[binrw::parser(reader)]
+pub fn sum_masks_raw_siff<T : Into<u64>>(
+    frame_sums : &mut ArrayViewMut1<u64>,
+    masks : &ArrayView3<bool>,
+    strip_bytes : T,
+    ydim : u32,
+    xdim : u32,
+) -> binrw::BinResult<()> {
+
+    photonwise_op!(
+        reader,
+        strip_bytes,
+        |siffphoton : &u64| {
+            masks.axis_iter(Axis(0)).zip(frame_sums.iter_mut())
+            .for_each(|(mask, frame_sum)| {
+                *frame_sum += mask[
+                    (photon_to_y!(siffphoton, 0 , ydim),
+                    photon_to_x!(siffphoton, 0, xdim),)
+                ] as u64
+            });
+        } 
+    );
+
+    Ok(())
+}
+
 /// Parses a compressed `.siff` format frame and returns
 /// an `Intensity` struct containing the intensity data.
 /// 
@@ -157,4 +178,47 @@ pub fn sum_mask_compressed_siff(
         });
     
         Ok(())
+}
+
+/// Iterates over all the masks for each pixel
+#[binrw::parser(reader)]
+pub fn sum_masks_compressed_siff(
+    frame_sums : &mut ArrayViewMut1<u64>,
+    masks : &ArrayView3<bool>,
+    ydim : u32,
+    xdim : u32,
+) -> binrw::BinResult<()> {
+
+    reader.seek(std::io::SeekFrom::Current(
+        -(ydim as i64 * xdim as i64 * std::mem::size_of::<u16>() as i64)
+    ))?;
+    
+    let mut data : Vec<u8> = vec![0; 
+        ydim as usize * xdim as usize * std::mem::size_of::<u16>()
+    ];
+    reader.read_exact(&mut data)?;
+
+    let data = try_cast_slice::<u8, u16>(&data).map_err(|err| binrw::Error::Io(
+        IOError::new(IOErrorKind::InvalidData, err))
+    )?;
+
+    // Seems bad to iterate over data N times!!
+    masks.axis_iter(Axis(0)).zip(frame_sums.iter_mut()).for_each(
+        |(mask, mask_sum)| {
+            data.iter().zip(mask.iter()).for_each(
+                |(&d, mask_px)| {
+                    *mask_sum += (d as u64) * (*mask_px as u64);
+                }
+            )
+        }
+    );
+
+    // .zip(data.iter()).for_each(
+    //     |(masks_pxs, &d)|
+    //     masks_pxs.zip(frame_sums.iter_mut()).for_each(|(mask_pixel, maskwise_sum)| {
+    //         *maskwise_sum += (d as u64) * (*mask_pixel as u64);
+    //     })
+    // );
+
+    Ok(())
 }

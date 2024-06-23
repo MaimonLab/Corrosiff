@@ -1,6 +1,7 @@
 mod parallelize_op;
 
 pub (super) use parallelize_op::parallelize_op as parallelize_op;
+//pub (super) use parallelize_op::registration_dependent_op;
 
 use crate::data::image::DimensionsError;
 
