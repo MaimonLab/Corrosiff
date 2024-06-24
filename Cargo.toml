@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0"
 description = "Rust-based tools for parsing and modifying `.siff` FLIM data files."
+keywords = ["flim", "microscopy", "scientific imaging", "siff", "neuroscience"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -22,17 +23,17 @@ lto = "fat"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 
-# [[bench]]
-# name = "opening_files_benchmark"
-# harness = false
-
-# [[bench]]
-# name = "read_frames_benchmark"
-# harness = false
+[[bench]]
+name = "opening_files_benchmark"
+harness = false
 
 [[bench]]
-name = "mask_frames_benchmark"
+name = "read_frames_benchmark"
 harness = false
+
+# [[bench]]
+# name = "mask_frames_benchmark"
+# harness = false
 
 # [[bench]]
 # name = "flim_read_benchmark"

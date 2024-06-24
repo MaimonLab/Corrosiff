@@ -2,6 +2,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use criterion::BenchmarkId;
 use corrosiff;
 
+use ndarray::prelude::*;
+
 use std::collections::HashMap;
 
 const SHORT_SIFF_PATH: &str = "/Users/stephen/Desktop/Data/imaging/2024-04/2024-04-07/Dh31_LexA_LKir_LGFlamp1/Fly1/BarOnAtTen_1.siff";
@@ -94,6 +96,37 @@ fn criterion_benchmark_histograms(c: &mut Criterion) {
         &frame_vec.as_slice(),
         |bench, frames| {
             bench.iter(|| black_box(siffreader.get_histogram(frames).unwrap()))
+        },
+    );
+
+    let dims = siffreader.image_dims().unwrap().to_tuple();
+    let mut mask = Array2::<bool>::from_elem(
+        (dims.0, dims.1), false
+    );
+    mask.mapv_inplace(|x| rand::random::<bool>());
+
+    read_bench.bench_with_input(
+        BenchmarkId::new("Read long siff, get histogram from all frames with mask", 
+            -1,
+        ),
+        &frame_vec.as_slice(),
+        |bench, frames| {
+            bench.iter(|| black_box(siffreader.get_histogram_mask(frames, &mask.view(), None).unwrap()))
+        },
+    );
+
+    let mut reg = corrosiff::RegistrationDict::new();
+    frame_vec.iter().for_each(|&x| {
+        reg.insert(x, ((x % 123) as i32, ((x + 50) % 87) as i32 ));
+    });
+
+    read_bench.bench_with_input(
+        BenchmarkId::new("Read long siff, get histogram from all frames with mask and registration", 
+            -1,
+        ),
+        &frame_vec.as_slice(),
+        |bench, frames| {
+            bench.iter(|| black_box(siffreader.get_histogram_mask(frames, &mask.view(), Some(&reg)).unwrap()))
         },
     );
 }
