@@ -42,6 +42,8 @@ use crate::{
         sum_lifetime_intensity_masks,
         sum_lifetime_intensity_masks_registered,
         load_histogram,
+        load_histogram_mask,
+        load_histogram_mask_registered,
         DimensionsError,
         Dimensions,
     },
@@ -875,9 +877,104 @@ impl SiffReader{
         Ok(array)
     }
 
-    pub fn get_histogram_mask(&self, frames : &[u64], mask : &Array2<bool>)
+    /// Extracts a framewise photon arrival time histogram
+    /// restricted only to the pixels in the region of interest.
+    /// 
+    /// Returns an array of `u64` values corresponding to the
+    /// number of photons in each bin of the arrival time histogram
+    /// summing across all photons within the ROI for each frame.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `frames` - The frames to apply the mask to
+    /// 
+    /// * `mask` - A 2D boolean array with the same shape as the frames'
+    /// `y` and `x` dimensions. The ROI is true for the pixels that should
+    /// be pooled to produce the histogram
+    /// 
+    /// * `registration` - An optional `HashMap<u64, (i32, i32)>` which
+    /// contains the pixel shifts for each frame. If this is `None`,
+    /// the frames are read unregistered (runs faster).
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<Array2<u64>, CorrosiffError>` - An array of `u64` values
+    /// corresponding to the number of photons in each bin of the arrival
+    /// time histogram for each frame requested. Shape is `(frames.len(), num_bins)`.
+    pub fn get_histogram_mask(&self, frames : &[u64], mask : &ArrayView2<bool>, registration : Option<&RegistrationDict>)
     -> Result<Array2<u64>, CorrosiffError> {
-        unimplemented!()
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+            
+        // Check that the frames share a shape with the mask
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        if array_dims.to_tuple() != mask.dim() {
+            return Err(FramesError::DimensionsError(
+                DimensionsError::MismatchedDimensions{
+                    required : array_dims,
+                    requested : Dimensions::from_tuple(mask.dim()),
+                }
+            ).into());
+        }
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let mut array = Array2::<u64>::zeros((frames.len(), self.file_format.num_flim_tau_bins().unwrap() as usize));
+
+        let op = 
+        | frames : &[u64], chunk : &mut ArrayViewMut2<u64>, reader : &mut File | 
+        -> Result<(), CorrosiffError> {
+            match registration {
+                Some(reg) => {
+                    frames.iter().zip(chunk.axis_iter_mut(Axis(0)))
+                        .try_for_each(
+                            |(&this_frame, mut this_chunk)|
+                            -> Result<(), CorrosiffError> {
+                            load_histogram_mask_registered(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut this_chunk,
+                                &mask.view(),
+                                *reg.get(&this_frame).unwrap(),
+                            )?; Ok(())
+                        })?;
+                },
+                None => {
+                    frames.iter().zip(chunk.axis_iter_mut(Axis(0)))
+                        .try_for_each(
+                            |(&this_frame, mut this_chunk)|
+                            -> Result<(), CorrosiffError> {
+                            load_histogram_mask(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut this_chunk,
+                                &mask.view(),
+                            )?; Ok(())
+                        })?;
+                }
+            }
+
+            Ok(())
+        };
+
+        parallelize_op!(
+            array, 
+            5000, 
+            frames, 
+            self._filename,
+            op
+        );
+
+        Ok(array)
     }
 
     /// Sums the intensity of the frames requested within the

@@ -3,6 +3,7 @@
 use binrw::io::{Read, Seek};
 use bytemuck::try_cast_slice;
 use ndarray::prelude::*;
+use itertools::izip;
 
 use std::io::{
     Error as IOError,
@@ -10,14 +11,13 @@ use std::io::{
 };
 
 use crate::{
-    tiff::{
-    Tag, TiffTagID::{Siff, StripByteCounts, StripOffsets }, IFD
-    },
-    CorrosiffError
+    data::image::utils::photonwise_op, tiff::{
+    Tag, TiffTagID::{Siff, StripByteCounts, StripOffsets}, IFD
+    }, CorrosiffError
 };
 use crate::data::image::{
     utils::load_array_from_siff,
-    dimensions::macros::*
+    dimensions::{roll,macros::*}
 };
 
 /// Reads the data pointed to by the IFD and uses it to
@@ -34,14 +34,11 @@ fn _load_histogram_compressed<I, ReaderT>(
     
     let mut data: Vec<u8> = vec![0; strip_byte_counts.into() as usize];
     reader.read_exact(&mut data)?;
-    
-    // confusing that the `if` statement is needed!!
-    // come back to this! Maybe there's a mistake in how
-    // the data is being saved??? Or maybe sometimes the laser
-    // sync is missed, like one in every several thousand pulses?
+
+    let hlen = histogram.len();
     try_cast_slice::<u8, u16>(&data).map_err(
         |err| IOError::new(IOErrorKind::InvalidData, err)
-    )?.iter().for_each(|&x| if x < histogram.len() as u16 {histogram[x as usize] += 1});
+    )?.iter().for_each(|&x| {histogram[x as usize % hlen] += 1});
 
     Ok(())
 }
@@ -68,12 +65,6 @@ fn _load_histogram_uncompressed<I, ReaderT>(
         });
     }
 
-    // try_cast_slice::<u8, u64>(&data).map_err(
-    //     |err| IOError::new(IOErrorKind::InvalidData, err)
-    // )?.iter().for_each(|&x| {
-    //     let tau = photon_to_tau_USIZE!(x);
-    //     if tau < histogram.len() {histogram[tau] += 1}
-    // });
     Ok(())
 }
 
@@ -131,6 +122,146 @@ pub fn load_histogram<I, ReaderT>(
         }
     }
     let _ = reader.seek(std::io::SeekFrom::Start(curr_pos));
+    Ok(())
+}
+
+#[binrw::parser(reader)]
+fn _load_histogram_mask_uncompressed<I : IFD>(
+    ifd: &I,
+    mask : &ArrayView2<bool>,
+    histogram : &mut ArrayViewMut1<u64>,
+    ) -> Result<(), IOError> {
+
+    let xdim = ifd.width().unwrap().into() as u32;
+    let ydim = ifd.height().unwrap().into() as u32;
+    let hlen = histogram.len();
+    let strip_bytes = ifd.get_tag(StripByteCounts).unwrap().value();
+    photonwise_op!(
+        reader,
+        strip_bytes,
+        |x : &u64| {
+            histogram[photon_to_tau_USIZE!(x) % hlen] += mask[
+                [photon_to_y!(*x, 0, ydim), photon_to_x!(*x, 0, xdim)]
+            ] as u64;
+        }
+    );
+
+    Ok(())
+}
+
+#[binrw::parser(reader)]
+fn _load_histogram_mask_compressed<I : IFD>(
+    ifd: &I,
+    mask : &ArrayView2<bool>,
+    histogram : &mut ArrayViewMut1<u64>
+    ) -> Result<(), IOError> {
+    
+    let xdim = ifd.width().unwrap().into() as u32;
+    let ydim = ifd.height().unwrap().into() as u32;
+
+    reader.seek(std::io::SeekFrom::Current(
+        -((ydim * xdim * std::mem::size_of::<u16>() as u32) as i64)
+    ))?;
+
+    let mut data : Vec<u8> = vec![0;
+        ydim as usize * xdim as usize * std::mem::size_of::<u16>()
+    ];
+
+    reader.read_exact(&mut data)?;
+
+    let intensity_data = try_cast_slice::<u8, u16>(&data).map_err(
+        |err| IOError::new(IOErrorKind::InvalidData, err)
+    )?;
+
+    let strip_byte_counts = ifd.get_tag(StripByteCounts).unwrap().value();
+    
+    let mut data: Vec<u8> = vec![0; strip_byte_counts.into() as usize];
+    reader.read_exact(&mut data)?;
+
+    let hlen = histogram.len();
+
+    let arrival_times = try_cast_slice::<u8, u16>(&data).map_err(
+        |err| IOError::new(IOErrorKind::InvalidData, err)
+    )?;
+
+    let mut arrival_time_pointer = 0;
+    izip!(
+        intensity_data.iter(),
+        mask.iter(),
+    ).for_each(|(&intensity, &m)| {
+            arrival_times[arrival_time_pointer..arrival_time_pointer + intensity as usize].iter().for_each(|&tau| {
+                histogram[tau as usize % hlen] += m as u64;
+            });
+            arrival_time_pointer += intensity as usize;
+    });
+
+    // let strip_byte_counts = ifd.get_tag(StripByteCounts).unwrap().value();
+    // let mut data: Vec<u8> = vec![0; strip_byte_counts.into() as usize];
+    // reader.read_exact(&mut data)?;
+    
+    // // confusing that the `if` statement is needed!!
+    // // come back to this! Maybe there's a mistake in how
+    // // the data is being saved??? Or maybe sometimes the laser
+    // // sync is missed, like one in every several thousand pulses?
+    // try_cast_slice::<u8, u16>(&data).map_err(
+    //     |err| IOError::new(IOErrorKind::InvalidData, err)
+    // )?.iter().zip(mask.iter()).for_each(|(&x, &m)| if m != 0 && x < histogram.len() as u16 {histogram[x as usize] += 1});
+
+    Ok(())
+}
+
+/// Reads the data pointed to by the IFD and uses it to
+/// increment the counts of the histogram provided by all
+/// pixels within the mask.
+pub fn load_histogram_mask<I : IFD, ReaderT : Read + Seek>(
+    reader: &mut ReaderT,
+    ifd: &I,
+    histogram : &mut ArrayViewMut1<u64>,
+    mask : &ArrayView2<bool>,
+    )-> Result<(), IOError> {
+
+    let curr_pos = reader.stream_position()?;
+    reader.seek(
+        std::io::SeekFrom::Start(
+            ifd.get_tag(StripOffsets)
+            .ok_or(IOError::new(IOErrorKind::InvalidData,
+            "Strip offset not found")
+            )?.value().into()
+        )  
+    )?;
+    match ifd.get_tag(Siff).unwrap().value().into() {
+        0 => {
+            _load_histogram_mask_uncompressed(reader, binrw::Endian::Little, (ifd, mask, histogram))
+        },
+        1 => {
+            _load_histogram_mask_compressed(reader, binrw::Endian::Little, (ifd, mask, histogram))
+        },
+        _ => {
+            Err(IOError::new(IOErrorKind::InvalidData,
+                "Invalid Siff tag value"))
+        }
+    }.map_err(|err| {
+        let _ = reader.seek(std::io::SeekFrom::Start(curr_pos));
+        err
+    })?;
+    let _ = reader.seek(std::io::SeekFrom::Start(curr_pos));
+    Ok(())
+}
+
+
+/// Reads the data pointed to by the IFD and uses it to
+/// increment the counts of the histogram provided by all
+/// pixels within the mask, adjusting for the registration of the frame.
+pub fn load_histogram_mask_registered<I : IFD, ReaderT : Read + Seek>(
+    reader: &mut ReaderT,
+    ifd : &I,
+    histogram : &mut ArrayViewMut1<u64>,
+    mask : &ArrayView2<bool>,
+    _registration : (i32, i32)
+    )-> Result<(), IOError> {
+
+    let rolled_mask = roll(mask, _registration);
+    load_histogram_mask(reader, ifd, histogram, &rolled_mask.view())?;
     Ok(())
 }
 

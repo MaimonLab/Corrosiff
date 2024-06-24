@@ -4,7 +4,6 @@
 /// load_array_from_siff(
 ///     reader,
 ///     ifd,
-///     array,
 ///     (raw_func, (raw_args)),
 ///     (compressed_func, (compressed_args))
 /// )
@@ -66,7 +65,7 @@ macro_rules! load_array_from_siff {
 /// to every photon. Consumes `strip_bytes`
 macro_rules! photonwise_op (
     ($reader : ident, $strip_bytes : ident, $op : expr) => {
-        let mut data = vec![0; $strip_bytes.into() as usize];
+        let mut data : Vec<u8> = vec![0; $strip_bytes.into() as usize];
         $reader.read_exact(&mut data)?;
 
         unsafe {

@@ -17,6 +17,8 @@ pub (crate) use intensity::siff::sum_masks as sum_intensity_masks;
 pub (crate) use intensity::siff::sum_masks_registered as sum_intensity_masks_registered;
 
 pub (crate) use flim::histogram::load_histogram as load_histogram;
+pub (crate) use flim::histogram::load_histogram_mask as load_histogram_mask;
+pub (crate) use flim::histogram::load_histogram_mask_registered as load_histogram_mask_registered;
 pub (crate) use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays
     as load_flim_empirical_and_intensity_arrays;
 pub (crate) use flim::empirical_lifetime::load_flim_empirical_and_intensity_arrays_registered
