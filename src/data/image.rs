@@ -27,6 +27,8 @@ pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_mask;
 pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_mask_registered;
 pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_masks;
 pub (crate) use flim::empirical_lifetime::sum_lifetime_intensity_masks_registered;
+pub (crate) use flim::load_array_tau_d;
+pub (crate) use flim::load_array_tau_d_registered;
 
 pub (crate) use dimensions::{Dimensions, DimensionsError, roll};
 

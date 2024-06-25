@@ -31,6 +31,8 @@ use crate::{
     data::image::{
         load_array_intensity,
         load_array_intensity_registered,
+        load_array_tau_d,
+        load_array_tau_d_registered,
         sum_intensity_mask,
         sum_intensity_mask_registered,
         sum_intensity_masks,
@@ -802,6 +804,98 @@ impl SiffReader{
         registration : Option<&RegistrationDict>,
     ) -> Result<Array1<u64>, CorrosiffError> {
         unimplemented!()
+    }
+
+    /// Returns a 4d array of `u16` values corresponding to the
+    /// number of photons per pixel per arrival time bin for each
+    /// frame. The first dimension corresponds to the frame number,
+    /// the second and third dimensions correspond to the `y` and `x`
+    /// dimensions of the frame, and the fourth dimension corresponds
+    /// to the arrival time bin. Warning: this data structure will generally
+    /// be ~600x as large as the corresponding image structure!
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `frames` - A slice of `u64` values corresponding to the
+    /// frame numbers to retrieve
+    /// 
+    /// * `registration` - An optional `HashMap<u64, (i32, i32)>` which
+    /// contains the pixel shifts for each frame. If this is `None`,
+    /// the frames are read unregistered (runs faster).
+    /// 
+    /// 
+    pub fn get_frames_tau_d(
+        &self,
+        frames : &[u64],
+        registration : Option<&RegistrationDict>,
+    ) -> Result<Array4<u16>, CorrosiffError> {
+
+        // Check that the frames are in bounds
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+        
+        // Check that the frames share a shape
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let mut array = Array4::<u16>::zeros(
+            (
+                frames.len(),
+                array_dims.ydim as usize,
+                array_dims.xdim as usize,
+                self.file_format.num_flim_tau_bins().unwrap() as usize
+            )
+        );
+
+        let op = | frames: &[u64], chunk : &mut ArrayViewMut4::<u16>, reader : &mut File | -> Result<(), CorrosiffError> {
+            match registration {
+                Some(reg) => {
+                    frames.iter().zip(chunk.axis_iter_mut(Axis(0)))
+                        .try_for_each(
+                            |(&this_frame, mut this_chunk)|
+                            -> Result<(), CorrosiffError> {
+                            load_array_tau_d_registered(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut this_chunk,
+                                *reg.get(&this_frame).unwrap(),
+                            )
+                        })?;
+                },
+                None => {
+                    frames.iter().zip(chunk.axis_iter_mut(Axis(0)))
+                        .try_for_each(
+                            |(&this_frame, mut this_chunk)|
+                            -> Result<(), CorrosiffError> {
+                            load_array_tau_d(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut this_chunk,
+                            )
+                        })?;
+                },
+            }
+            Ok(())
+        };
+
+        parallelize_op!(
+            array, 
+            2500, 
+            frames, 
+            self._filename,
+            op
+        );
+
+        Ok(array)
     }
 
     /***************
@@ -2299,6 +2393,30 @@ mod tests {
         assert_eq!(just_intensity, intensity);
 
         //println!("Lifetime : {:?}", lifetime);
+    }
+
+    #[test]
+    fn test_get_frames_tau_d(){
+        let reader = SiffReader::open(TEST_FILE_PATH).unwrap();
+        let frame_nums = [15u64, 35u64];
+        let frames = reader.get_frames_tau_d(&frame_nums, None).unwrap();
+
+        let frames_intensity = reader.get_frames_intensity(&frame_nums, None).unwrap();
+
+        assert_eq!(
+            frames_intensity,
+            frames.sum_axis(Axis(3))
+        );
+
+        let reg = RegistrationDict::new();
+        let frames = reader.get_frames_tau_d(&frame_nums, Some(&reg)).unwrap();
+
+        let frames_intensity = reader.get_frames_intensity(&frame_nums, Some(&reg)).unwrap();
+
+        assert_eq!(
+            frames_intensity,
+            frames.sum_axis(Axis(3))
+        );
     }
 
     #[test]

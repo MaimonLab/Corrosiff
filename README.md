@@ -7,6 +7,8 @@ TODOS:
 
 - A real README.
 
+- Sparse arrays for `tau_d` method(s).
+
 - `get_epoch_timestamps_both` doesn't error if `system` timestamps
 don't exist! It will just crash! Because I don't use the `?` correctly.
 
