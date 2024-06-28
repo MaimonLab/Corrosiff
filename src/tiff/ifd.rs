@@ -14,7 +14,7 @@ use std::fmt::Debug;
 use std::iter::Iterator;
 use binrw::{
     io::{Read, Seek, SeekFrom},
-    BinRead, //BinWrite,
+    BinRead, BinWrite,
     meta::ReadEndian
 };
 
@@ -34,7 +34,7 @@ pub trait IFD : BinRead + ReadEndian + Default {
     /// Both types of Tiff spec use a type that can
     /// be created from a u32, but not both types can
     /// be cast into one
-    type PointerSize : Into<u64> + Copy + From<u32>;
+    type PointerSize : Into<u64> + Copy + From<u32> + From<u16>;
 
     /// Creates a new `IFD` object from a reader
     /// pointing to the start of the IFD
@@ -48,11 +48,25 @@ pub trait IFD : BinRead + ReadEndian + Default {
         Self::read(reader)
     }
 
+    fn tags(&self)->&Vec<Self::TagType>;
+
     /// Returns the number of tags stored by the IFD
     fn num_tags(&self) -> u16;
     
     /// Returns the location of the next IFD in the file
     fn next_ifd(&self) -> Option<Self::PointerSize>;
+
+    /// Returns the size of this IFD
+    fn length_of_ifd(&self) -> Self::PointerSize {
+        let num_tags = self.num_tags();
+        let tag_size = std::mem::size_of::<Self::TagType>() as u16;
+        let pointer_size = std::mem::size_of::<Self::PointerSize>() as u16;
+        let byte_size = std::mem::size_of::<Self::ByteSize>() as u16;
+        let next_ifd_size = std::mem::size_of::<Option<Self::PointerSize>>() as u16;
+        let num_tags_size = std::mem::size_of::<u16>() as u16;
+        let end_of_ifd = num_tags_size + num_tags * tag_size + pointer_size + next_ifd_size;
+        end_of_ifd.into()
+    }
     
     /// Returns the width of the frame this IFD corresponds to
     fn width(&self)->Option<Self::PointerSize>;
@@ -117,6 +131,7 @@ pub trait IFD : BinRead + ReadEndian + Default {
         //     to_next : self.next_ifd(),
         // }
     }
+    fn size_of_tag(&self) -> usize {Self::TagType::sizeof()}
 }
 
 /// Contains the IFD data, which is the
@@ -138,6 +153,10 @@ impl IFD for TiffIFD {
     type TagType = TiffTag;
     type PointerSize = u32;
 
+    fn tags(&self)->&Vec<TiffTag>{
+        &self.tags
+    }
+    
     fn num_tags(&self) -> u16 {
         self.num_tags
     }
@@ -168,7 +187,6 @@ impl IFD for TiffIFD {
     }
 }
 
-
 #[derive(BinRead, Default)]
 #[br(little)]
 pub struct BigTiffIFD {
@@ -184,6 +202,10 @@ impl IFD for BigTiffIFD {
     type ByteSize = u64;
     type TagType = BigTag;
     type PointerSize = u64;
+
+    fn tags(&self)->&Vec<BigTag>{
+        &self.tags
+    }
 
     fn num_tags(&self) -> u16 {
         self.num_tags as u16
@@ -224,7 +246,7 @@ pub struct IFDIterator<'reader, S, T> where S : SeekRead , T : IFD {
 
 impl <'a, S, IFDT> IFDIterator<'a, S, IFDT>
     where S : SeekRead, IFDT : IFD,
-    for<'args> IFDT::Args<'args> : Default {
+    for<'args> <() as BinRead>::Args<'args> : Default {
 
         /// TODO - Implement and test!! The generic needs to take in the
         /// IFD type?
@@ -258,7 +280,7 @@ impl <'a, S, IFDT> IFDIterator<'a, S, IFDT>
 
 impl<'a, S, IFDT> Iterator for IFDIterator<'a, S, IFDT>
     where S : SeekRead, IFDT : IFD,
-    for<'args> IFDT::Args<'args> : Default {
+    for<'args> <IFDT as BinRead>::Args<'args> : Default {
     type Item = IFDT;
 
     fn next(&mut self) -> Option::<Self::Item> {

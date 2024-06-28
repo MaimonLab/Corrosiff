@@ -14,6 +14,8 @@ use std::io::{
     ErrorKind as IOErrorKind,
 };
 
+use crate::CorrosiffError;
+
 use crate::tiff::IFD;
 use crate::tiff::{
     Tag,
@@ -22,6 +24,10 @@ use crate::tiff::{
 use crate::data::image::{
     utils::load_array_from_siff,
     intensity::siff::{
+        tiff::{
+            load_array_tiff,
+            load_array_tiff_registered,
+        },
         registered::{
             load_array_raw_siff_registered,
             load_array_compressed_siff_registered,
@@ -43,6 +49,7 @@ use crate::data::image::{
 
 mod registered;
 mod unregistered;
+mod tiff;
 mod siff_frame;
 
 pub (crate) use siff_frame::SiffFrame;
@@ -68,29 +75,18 @@ fn raw_siff_parser<T : Into<u64>>(
 /// 
 /// Expected to be at the data strip, so it will go backwards by the size of the
 /// intensity data and read that.
-#[binrw::parser(reader)]
+#[binrw::parser(reader, endian)]
 fn compressed_siff_parser(
         ydim : u32,
         xdim : u32
     ) -> binrw::BinResult<Array2<u16>> {
+    
+    let mut frame = Array2::<u16>::zeros(
+        (ydim as usize, xdim as usize)
+    );
 
-    reader.seek(std::io::SeekFrom::Current(
-        -(ydim as i64 * xdim as i64 * std::mem::size_of::<u16>() as i64)
-    ))?;
-     
-    let mut data : Vec<u8> = vec![0; 
-        ydim as usize * xdim as usize * std::mem::size_of::<u16>()
-    ];
-    reader.read_exact(&mut data)?;
-
-    let data = try_cast_slice::<u8, u16>(&data).map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?;
-
-    Ok(Array2::<u16>::from_shape_vec((ydim as usize, xdim as usize), data.to_vec())
-    .map_err(|err| binrw::Error::Io(
-        IOError::new(IOErrorKind::InvalidData, err))
-    )?)
+    load_array_compressed_siff(reader, endian, (&mut frame.view_mut(), ydim, xdim))?;
+    Ok(frame)
 }
 
 /// Loads an allocated array with data read directly
@@ -125,7 +121,7 @@ pub fn load_array<'a, ReaderT, I>(
         reader : &'a mut ReaderT,
         ifd : &'a I,
         array : &'a mut ArrayViewMut2<u16>
-    ) -> Result<(), IOError> where I : IFD, ReaderT : Read + Seek{
+    ) -> Result<(), CorrosiffError> where I : IFD, ReaderT : Read + Seek{
     
     load_array_from_siff!(
         reader,
@@ -141,6 +137,14 @@ pub fn load_array<'a, ReaderT, I>(
         ),
         (
             load_array_compressed_siff,
+            (
+                &mut array.view_mut(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32
+            )
+        ),
+        (
+            load_array_tiff,
             (
                 &mut array.view_mut(),
                 ifd.height().unwrap().into() as u32,
@@ -178,7 +182,7 @@ pub fn load_array<'a, ReaderT, I>(
 /// use std::fs::File;
 /// 
 /// let mut array = Array2::<u16>::zeros((512, 512));
-/// let mut reader = File::open("file.siff").unwrap());
+/// let mut reader = File::open("file.siff").unwrap();
 /// // TODO finish annotating
 /// //let ifd = BigTiffIFD::new
 /// // shift the frame down by 2 pixels
@@ -194,7 +198,7 @@ pub fn load_array_registered<'a, T, S>(
     ifd : &'a S,
     array : &'a mut ArrayViewMut2<u16>,
     registration : (i32, i32),    
-) -> Result<(), IOError> where S : IFD, T : Read + Seek {
+) -> Result<(), CorrosiffError> where S : IFD, T : Read + Seek {
     
     load_array_from_siff!(
         reader,
@@ -211,6 +215,15 @@ pub fn load_array_registered<'a, T, S>(
         ),
         (
             load_array_compressed_siff_registered,
+            (
+                &mut array.view_mut(),
+                ifd.height().unwrap().into() as u32,
+                ifd.width().unwrap().into() as u32,
+                registration
+            )
+        ),
+        (
+            load_array_tiff_registered,
             (
                 &mut array.view_mut(),
                 ifd.height().unwrap().into() as u32,
@@ -501,7 +514,20 @@ mod tests {
             SiffFrame::from_ifd(&ifd_vec[UNCOMPRESSED_FRAME_NUM+1], &mut f).unwrap().intensity.sum(),
             ((&ifd_vec[UNCOMPRESSED_FRAME_NUM+1]).get_tag(StripByteCounts).unwrap().value() as u16) / 8
         );
+    }
 
+    #[test]
+    fn frame_vs_siffreader(){
+        let mut f = std::fs::File::open(TEST_FILE_PATH).unwrap();
+        let fformat = FileFormat::parse_filetype(&mut f).unwrap();
+        let ifd_vec : Vec<BigTiffIFD> = fformat.get_ifd_iter(&mut f).collect();
+
+        let frame = SiffFrame::from_ifd(&ifd_vec[60], &mut f).unwrap();
+
+        let sr = crate::open_siff(TEST_FILE_PATH).unwrap();
+        let siff_frame = sr.get_frames_intensity(&[60], None).unwrap();
+
+        assert_eq!(frame.intensity, siff_frame.slice(s![0,..,..]));
     }
 
     /// Shifts but only in the forward direction, i.e.

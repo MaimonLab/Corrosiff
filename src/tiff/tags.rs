@@ -7,7 +7,7 @@
 
 use std::convert::TryFrom;
 use std::fmt::Display;
-use binrw::BinRead;
+use binrw::{BinRead, BinWrite};
 
 /// The ValueType field can either
 /// be of size u32 or u64, depending
@@ -50,14 +50,17 @@ pub trait Tag {
     fn to_string(&self) -> String {
         format!("{}", self.tag())
     }
+    fn sizeof() -> usize;
 }
 
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct TiffTag {
     #[br(map  = |x: u16| TiffTagID::try_from(x).unwrap())]
+    //#[bw(map = |x : &TiffTagID| x.into())]
     pub tag : TiffTagID,
     #[br(map = |x: u16| TiffTagType::try_from(x).unwrap())]
+    //#[bw(map = |x : &TiffTagType| x.into())]
     pub tag_dtype : TiffTagType,
     pub num_values : u32,
     pub value : u32,
@@ -84,14 +87,23 @@ impl Tag for TiffTag {
 
     fn parse(&self) {
     }
+
+    fn sizeof() -> usize {
+        std::mem::size_of::<u16>() 
+        + std::mem::size_of::<u16>()
+        + std::mem::size_of::<u32>()
+        + std::mem::size_of::<u32>()
+    }
 }
 
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct BigTag {
     #[br(map  = |x: u16| TiffTagID::try_from(x).unwrap())]
+    //#[bw(map = |x : &TiffTagID| x.into())]
     pub tag : TiffTagID,
     #[br(map = |x: u16| TiffTagType::try_from(x).unwrap())]
+    //#[bw(map = |x : &TiffTagType| x.into())]
     pub tag_dtype : TiffTagType,
     //bytes_per_value : u64,
     pub num_values : u64,
@@ -119,6 +131,13 @@ impl Tag for BigTag {
 
     fn parse(&self) {
         // Do nothing for now
+    }
+
+    fn sizeof() -> usize {
+        std::mem::size_of::<u16>() 
+        + std::mem::size_of::<u16>()
+        + std::mem::size_of::<u64>()
+        + std::mem::size_of::<u64>()
     }
 }
 
@@ -177,9 +196,9 @@ pub enum TiffTagID {
     Siff, // SiffCompress if 1
 }
 
-impl Into<u16> for TiffTagID {
-    fn into(self) -> u16 {
-        match self {
+impl From<TiffTagID> for u16 {
+    fn from(tag: TiffTagID) -> Self {
+        match tag {
             TiffTagID::ImageWidth => 256,
             TiffTagID::ImageLength => 257,
             TiffTagID::BitsPerSample => 258,
@@ -205,6 +224,35 @@ impl Into<u16> for TiffTagID {
         }
     }
 }
+
+// impl Into<u16> for TiffTagID {
+//     fn into(self) -> u16 {
+//         match self {
+//             TiffTagID::ImageWidth => 256,
+//             TiffTagID::ImageLength => 257,
+//             TiffTagID::BitsPerSample => 258,
+//             TiffTagID::Compression => 259,
+//             TiffTagID::PhotometricInterpretation => 262,
+//             TiffTagID::ImageDescription => 270,
+//             TiffTagID::StripOffsets => 273,
+//             TiffTagID::Orientation => 274,
+//             TiffTagID::SamplesPerPixel => 277,
+//             TiffTagID::RowsPerStrip => 278,
+//             TiffTagID::StripByteCounts => 279,
+//             TiffTagID::XResolution => 282,
+//             TiffTagID::YResolution => 283,
+//             TiffTagID::PlanarConfiguration => 284,
+//             TiffTagID::ResolutionUnit => 296,
+//             TiffTagID::Software => 305,
+//             TiffTagID::DateTime => 306,
+//             TiffTagID::Artist => 315,
+//             TiffTagID::Predictor => 317,
+//             TiffTagID::ExtraSamples => 338,
+//             TiffTagID::SampleFormat => 339,
+//             TiffTagID::Siff => 907,
+//         }
+//     }
+// }
 
 impl TryFrom<u16> for TiffTagID {
     type Error = ();
@@ -263,9 +311,31 @@ pub enum TiffTagType {
     IFD8, // BigTiff only
 }
 
-impl Into<u16> for TiffTagType {
-    fn into(self) -> u16 {
-        match self {
+// impl Into<u16> for TiffTagType {
+//     fn into(self) -> u16 {
+//         match self {
+//             TiffTagType::Byte => 1,
+//             TiffTagType::Ascii => 2,
+//             TiffTagType::Short => 3,
+//             TiffTagType::Long => 4,
+//             TiffTagType::Rational => 5,
+//             TiffTagType::SByte => 6,
+//             TiffTagType::Undefined => 7,
+//             TiffTagType::SShort => 8,
+//             TiffTagType::SLong => 9,
+//             TiffTagType::SRational => 10,
+//             TiffTagType::Float => 11,
+//             TiffTagType::Double => 12,
+//             TiffTagType::Long8 => 16,
+//             TiffTagType::SLong8 => 17,
+//             TiffTagType::IFD8 => 18,
+//         }
+//     }
+// }
+
+impl From<TiffTagType> for u16 {
+    fn from(tag: TiffTagType) -> Self {
+        match tag {
             TiffTagType::Byte => 1,
             TiffTagType::Ascii => 2,
             TiffTagType::Short => 3,
@@ -284,6 +354,7 @@ impl Into<u16> for TiffTagType {
         }
     }
 }
+
 
 impl TryFrom<u16> for TiffTagType {
     type Error = ();

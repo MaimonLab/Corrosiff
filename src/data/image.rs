@@ -9,6 +9,8 @@ mod intensity;
 mod flim;
 mod utils;
 
+pub (crate) use intensity::siff::SiffFrame;
+
 pub (crate) use intensity::siff::load_array as load_array_intensity;
 pub (crate) use intensity::siff::load_array_registered as load_array_intensity_registered;
 pub (crate) use intensity::siff::sum_mask as sum_intensity_mask;

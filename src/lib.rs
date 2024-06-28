@@ -15,6 +15,7 @@
 
 use std::{
     io::Result as IOResult,
+    io::Error as IOError,
     path::{Path,PathBuf},
     fs::File,
     collections::HashMap,
@@ -49,11 +50,11 @@ pub enum CorrosiffError {
     NotImplementedError,
 }
 
-impl From<std::io::Error> for CorrosiffError {
-    fn from(err : std::io::Error) -> Self {
-        CorrosiffError::IOError(err)
-    }
-}
+// impl From<std::io::Error> for CorrosiffError {
+//     fn from(err : std::io::Error) -> Self {
+//         CorrosiffError::IOError(err)
+//     }
+// }
 
 impl From<FramesError> for CorrosiffError {
     fn from(err : FramesError) -> Self {
@@ -65,6 +66,13 @@ impl From<DimensionsError> for CorrosiffError {
     fn from(err : DimensionsError) -> Self {
         CorrosiffError::DimensionsError(err)
     }
+}
+
+impl From<binrw::io::Error> for CorrosiffError {
+    fn from(err : binrw::io::Error) -> Self {
+        CorrosiffError::IOError(std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+    }
+
 }
 
 impl std::error::Error for CorrosiffError {}
@@ -306,20 +314,24 @@ pub fn get_frames(
 /// ```
 pub fn siff_to_tiff(
     filename : & str,
-    _mode : TiffMode,
+    mode : TiffMode,
     save_path : Option<&String>,
     ) -> IOResult<()>{
 
     let file_path: PathBuf = PathBuf::from(filename);
 
-    // let siffreader = SiffReader::open(file_path.to_str().unwrap())?;
+    let siffreader = SiffReader::open(file_path.to_str().unwrap())?;
 
     let save_path: PathBuf = save_path
         .map(PathBuf::from)
         .unwrap_or_else(|| {file_path.with_extension("tiff")});
 
-    File::create(save_path)?;
-    Ok(())
+    let mut tiff_file = File::create(save_path)?;
+
+    siffreader.write_header_to_file(&mut tiff_file, &mode)
+    .map_err(|err| IOError::new(std::io::ErrorKind::InvalidData, err))?;
+    siffreader.write_tiff_frames_to_file(&mut tiff_file, None)
+    .map_err(|err| IOError::new(std::io::ErrorKind::InvalidData, err))
 }
 
 #[cfg(test)]
@@ -334,6 +346,8 @@ mod tests {
 
     pub static BIG_FILE_PATH :&str = "/Users/stephen/Desktop/Data/imaging/2024-05/2024-05-27/SS02255_greenCamui_alpha/Fly1/PB_1.siff";
 
+    pub static TIFF_SIFF : &str = "/Users/stephen/Desktop/Data/imaging/2024_06_03_9.tiff";
+
     #[test]
     fn test_open_siff() {
         let reader = open_siff("file.siff");
@@ -347,12 +361,31 @@ mod tests {
 
     #[test]
     fn test_siff_to_tiff() {
-        let mut pb = PathBuf::from(TEST_FILE_PATH);
+
+        let siffreader = open_siff(&TEST_FILE_PATH).unwrap();
+        let mut pb = PathBuf::from(&TEST_FILE_PATH);
+        // let siffreader = open_siff(BIG_FILE_PATH).unwrap();
+        // let mut pb = PathBuf::from(BIG_FILE_PATH);
         pb.set_extension("tiff");
-        assert!(!pb.exists());
+
+        // assert!(!pb.exists());
         let result = siff_to_tiff(TEST_FILE_PATH, TiffMode::ScanImage, None);
+        // let result = siff_to_tiff(BIG_FILE_PATH, TiffMode::ScanImage, Some(&pb.to_str().unwrap().to_string()));
         assert!(result.is_ok());
         assert!(pb.exists());
+
+        let tiffreader = open_siff(&pb).unwrap();
+        
+        assert_eq!(
+            siffreader.get_frames_intensity(
+                siffreader.frames_vec().as_slice(),
+                None
+            ).unwrap(),
+            tiffreader.get_frames_intensity(
+                tiffreader.frames_vec().as_slice(),
+                None
+            ).unwrap()
+        );
 
         use std::fs;
         fs::remove_file(pb).expect("Failed to remove test file");

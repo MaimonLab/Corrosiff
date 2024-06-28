@@ -6,17 +6,22 @@ use std::{
     fmt::Display,
     fs::File,
     io::Result as IOResult,
+    io::Write,
+    io::Seek,
     path::{Path, PathBuf}
 };
 
+use binrw::BinWrite;
 use binrw::io::BufReader;
 use itertools::izip;
 use ndarray::prelude::*;
 use rayon::prelude::*;
 
 // my module structure is probably
-// too complex
+// too complex. Or I should hide some of
+// these deeper in the module?
 use crate::{
+    TiffMode,
     utils::{
         parallelize_op,
         FramesError,
@@ -29,6 +34,7 @@ use crate::{
         dimensions_consistent,
     },
     data::image::{
+        SiffFrame,
         load_array_intensity,
         load_array_intensity_registered,
         load_array_tau_d,
@@ -562,55 +568,30 @@ impl SiffReader{
 
         let op = | frames : &[u64], chunk : &mut ArrayViewMut3<u16>, reader : &mut File |
         -> Result<(), CorrosiffError> {
-            // registration_dependent_op!{
-            //     registration,
-            //     frames.iter().zip(chunk.axis_iter_mut(Ais(0)))
-            //         .try_for_each(
-            //             |(&this_frame, mut this_chunk)|
-            //             -> Result<(), FramesError> {
-            //             load_array_intensity_registered(
-            //                 reader,
-            //                 &self._ifds[this_frame as usize],
-            //                 &mut this_chunk,
-            //                 *reg.get(&this_frame).unwrap(),
-            //             ).map_err(FramesError::IOError)
-            //         })?;
-            //     ,
-            //     frames.iter().zip(chunk.axis_iter_mut(Axis(0)))
-            //         .try_for_each(
-            //             |(&this_frame, mut this_chunk)|
-            //             -> Result<(), FramesError> {
-            //             load_array_intensity(
-            //                 reader,
-            //                 &self._ifds[this_frame as usize],
-            //                 &mut this_chunk,
-            //             ).map_err(FramesError::IOError)
-            //         })?;
-            // }
             match registration {
                 Some(reg) => {
                     frames.iter().zip(chunk.axis_iter_mut(Axis(0)))
                         .try_for_each(
                             |(&this_frame, mut this_chunk)|
-                            -> Result<(), FramesError> {
+                            -> Result<(), CorrosiffError> {
                             load_array_intensity_registered(
                                 reader,
                                 &self._ifds[this_frame as usize],
                                 &mut this_chunk,
                                 *reg.get(&this_frame).unwrap(),
-                            ).map_err(FramesError::IOError)
+                            )
                         })?;
                 },
                 None => {
                     frames.iter().zip(chunk.axis_iter_mut(Axis(0)))
                         .try_for_each(
                             |(&this_frame, mut this_chunk)|
-                            -> Result<(), FramesError> {
+                            -> Result<(), CorrosiffError> {
                             load_array_intensity(
                                 reader,
                                 &self._ifds[this_frame as usize],
                                 &mut this_chunk,
-                            ).map_err(FramesError::IOError)
+                            )
                         })?;
                 },
             }
@@ -798,13 +779,13 @@ impl SiffReader{
     /// ## Panics
     /// 
     /// *It's not implemented yet!*
-    pub fn get_photon_stream(
-        &self,
-        frames : &[u64],
-        registration : Option<&RegistrationDict>,
-    ) -> Result<Array1<u64>, CorrosiffError> {
-        unimplemented!()
-    }
+    // pub fn get_photon_stream(
+    //     &self,
+    //     frames : &[u64],
+    //     registration : Option<&RegistrationDict>,
+    // ) -> Result<Array1<u64>, CorrosiffError> {
+    //     unimplemented!()
+    // }
 
     /// Returns a 4d array of `u16` values corresponding to the
     /// number of photons per pixel per arrival time bin for each
@@ -2270,6 +2251,83 @@ impl SiffReader{
         Ok((lifetime_array, intensity_array))
     }
 
+    /// Copies the tiff/siff header from the currently
+    /// opened file to the position of the writer.
+    /// 
+    /// When finished, this can write either OME-TIFF
+    /// compliant files or the default ScanImage format.
+    /// 
+    /// For now it only does the ScanImage format.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `file` - A mutable reference to a `Write` and `Seek` object
+    /// which will be used to write the header to the file.
+    /// Goes directly to the beginning of the file to write.
+    /// 
+    /// * `mode` - A `TiffMode` enum which specifies the mode
+    /// to write the file in. For now, only `TiffMode::ScanImage`
+    /// is supported.
+    /// 
+    pub fn write_header_to_file<WriterT: Write + Seek>(
+        &self,
+        file : &mut WriterT,
+        mode : &TiffMode
+    ) -> Result<(), CorrosiffError> {
+        file.seek(std::io::SeekFrom::Start(0))?;
+        match mode {
+            TiffMode::ScanImage => {
+                self.file_format.write(file)?;
+                Ok(())
+            },
+            TiffMode::OME => {
+                Err(
+                    CorrosiffError::NotImplementedError
+                )
+            },
+        }
+    }
+
+    /// Writes the frames requested into the file specified
+    /// by the writer. The saved data is **intensity only**
+    /// and is unregistered.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `file` - A mutable reference to a `Write` object
+    /// pointing to the location to write the frames to.
+    /// 
+    /// * `frames` - An optional slice of `u64` values corresponding
+    /// to the frame numbers to write to the file. If this is `None`,
+    /// all frames are written to the file.
+    pub fn write_tiff_frames_to_file<WriterT : Write + Seek>(
+        &self,
+        file : &mut WriterT,
+        frames : Option<&[u64]>,
+    ) -> Result<(), CorrosiffError> {
+        let mut file_reader = File::open(self._filename.clone())?;
+
+        if frames.is_none() {
+            let mut reader_for_ifd = File::open(self._filename.clone())?;
+            self.file_format.get_ifd_iter(&mut reader_for_ifd)
+            .try_for_each(|ifd| {
+                SiffFrame::write_frame_as_tiff(
+                    &mut file_reader, 
+                    file, 
+                    &ifd
+                )
+            })?;
+            return Ok(());
+        }
+
+        frames.unwrap().iter().map(|&frame| &self._ifds[frame as usize])
+        .try_for_each(|ifd| {
+            SiffFrame::write_frame_as_tiff(&mut file_reader,file, ifd)
+        })?;
+
+        Ok(())
+    }
+
 }
 
 impl Display for SiffReader {
@@ -2608,7 +2666,6 @@ mod tests {
             |frame_idx| 
             by_plane[frame_idx % three_d_roi.dim().0 as usize][frame_idx / three_d_roi.dim().0 as usize]
         );
-
         assert_eq!(from_indiv, three_d_sum);
 
 
@@ -2625,7 +2682,8 @@ mod tests {
         use rand;
         for element in rois.iter_mut() {*element = rand::random::<bool>();}
 
-        let frames = (0..300).map(|x| x as u64).collect::<Vec<_>>();
+        //let frames = [15, 40];
+        let frames = (0..500).map(|x| x as u64).collect::<Vec<_>>();
 
         // First compute each plane separately
         let roi_sums = rois.axis_iter(Axis(1)).enumerate().map(
@@ -2643,34 +2701,43 @@ mod tests {
         // Iterate through roi_sums and zip them together
         let from_indiv = Array2::<u64>::from_shape_fn(
             (frames.len(), rois.dim().0),
-            |(frame_idx, roi_idx)| roi_sums[frame_idx % rois.dim().0 as usize][[(frame_idx/rois.dim().1) as usize, roi_idx]]
+            |(frame_idx, roi_idx)|
+                roi_sums[frame_idx % rois.dim().1 as usize]
+                [[(frame_idx/rois.dim().1) as usize, roi_idx]]
         );
 
         let one_pass = reader.sum_rois_volume(&rois.view(), &frames, None).unwrap();
 
-        // the two methods handle the uneven final volumes differently it seems?
-        // But on the python end they evaluate the same??? Come back to this
-        // and figure out what's going on!!
-        assert_eq!(from_indiv.slice(s![..-10,..]), one_pass.slice(s![..-10, ..]));
+        assert_eq!(from_indiv, one_pass);
     
-            // let mut reg_map = RegistrationDict::new();
-            // frames.iter().for_each(|&x| {
-            //     reg_map.insert(x, (rand::random::<i32>() % reader.image_dims().unwrap().ydim as i32, rand::random::<i32>() % reader.image_dims().unwrap().xdim as i32));
-            // });
-    
-            // let roi_sums = rois.axis_iter(Axis(0)).map(
-            //     |roi| reader.sum_roi_flat(&roi, &frames, Some(&reg_map)).unwrap()
-            // ).collect::<Vec<_>>();
-    
-            // let from_indiv = Array2::<u64>::from_shape_fn(
-            //     (frames.len(), rois.dim().0),
-            //     |(frame_idx, roi_idx)| roi_sums[roi_idx][frame_idx]
-            // );
-    
-            // let one_pass = reader.sum_rois_flat(&rois.view(), &frames, Some(&reg_map)).unwrap();
-    
-            // assert_eq!(from_indiv, one_pass);
-        //assert_eq!(three_d_sum.to_vec(), piecewise)
+        let mut reg_map = RegistrationDict::new();
+        frames.iter().for_each(|&x| {
+            reg_map.insert(x, (rand::random::<i32>() % reader.image_dims().unwrap().ydim as i32, rand::random::<i32>() % reader.image_dims().unwrap().xdim as i32));
+        });
+        
+        let roi_sums = rois.axis_iter(Axis(1)).enumerate().map(
+            |(idx, roi)| {
+                // Takes the idx-th plane, skip rois.dim().1 frames each time
+                reader.sum_rois_flat(
+                    &roi, 
+                    frames.iter().skip(idx).step_by(rois.dim().1)
+                    .map(|x| *x).collect::<Vec<_>>().as_slice(),
+                    Some(&reg_map)
+                ).unwrap()
+            }
+        ).collect::<Vec<_>>();
+
+        // Iterate through roi_sums and zip them together
+        let from_indiv = Array2::<u64>::from_shape_fn(
+            (frames.len(), rois.dim().0),
+            |(frame_idx, roi_idx)|
+                roi_sums[frame_idx % rois.dim().1 as usize]
+                [[(frame_idx/rois.dim().1) as usize, roi_idx]]
+        );
+
+        let one_pass = reader.sum_rois_volume(&rois.view(), &frames, Some(&reg_map)).unwrap();
+
+        assert_eq!(from_indiv, one_pass);
     }
 
     #[test]

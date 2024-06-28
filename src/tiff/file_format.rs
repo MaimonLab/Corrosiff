@@ -9,9 +9,11 @@ use std::vec;
 
 use binrw::{
     BinRead,
+    BinWrite,
     io::{
         Read,
         Seek,
+        Write,
     },
 };
 
@@ -63,18 +65,16 @@ enum TiffType {
 
 /// Contains primary tiff specification
 /// data -- nothing ScanImage or siff specific.
-#[derive(BinRead)]
+#[derive(BinRead, BinWrite)]
 enum TiffHeader {
-    #[br(magic(42u16))]
+    #[brw(magic(42u16))]
     Default {
         first_ifd : u32,
     },
-    #[br(
-        magic(43u16),
-        assert(_bytes_per_pointer == 8),
-    )]
+    #[brw(magic(43u16))]
+    #[br(assert(_bytes_per_pointer == 8))]
     BigTiff {
-        #[br(pad_after(2))]
+        #[brw(pad_after(2))]
         _bytes_per_pointer : u16,
         first_ifd : u64,
     }
@@ -94,13 +94,14 @@ enum TiffHeader {
 /// 
 /// The actual NVFD is at the end of the header, and the
 /// ROI string is after the NVFD.
-#[derive(BinRead)]
+#[derive(BinRead, BinWrite)]
 #[br(
     little,
     assert(endian == [73, 73]),
     assert(tiff_magic == 117637889),
     assert((si_version == 4) || (si_version == 3)),
 )]
+#[bw(little)]
 struct SiffHeader {
     endian : [u8; 2],
     
@@ -268,6 +269,38 @@ impl FileFormat{
         Some(5 * u32::pow(2,bin_res))
     }
 
+    /// Writes the file-format data that is common to all tiff/siff files
+    /// into the position the writer is currently at.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `writer` - A writer that can write and seek pointing to the
+    /// location in the file where the tiff header data should be written
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<(), binrw::io::Error>` - An error if the write fails
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// 
+    /// let writer = BufWriter::new(File::create("file.tiff").unwrap());
+    /// file_format.write(&writer);
+    /// 
+    /// ```
+    /// 
+    pub fn write<T: Write + Seek>(&self, writer : &mut T) -> binrw::io::Result<()> {
+        self.siff_header.write(writer)
+        .map_err(|e| binrw::io::Error::new(binrw::io::ErrorKind::Other, e))?;
+        writer.write_all(&mut self.nvfd.as_bytes())?;
+        writer.write_all(&mut self.roi_string.as_bytes())?;
+        debug_assert_eq!(
+            writer.stream_position()?,
+            self.first_ifd_val()
+        );
+        Ok(())
+    }
 
 }
 

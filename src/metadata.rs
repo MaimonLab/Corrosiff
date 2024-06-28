@@ -99,7 +99,7 @@ pub struct FrameMetadata {
     pub nvfd_address : u64,
     pub roi_address : u64,
     pub sample_format : u16,
-    pub siff_compress : u16,
+    pub siff_compress : Option<u16>,
     pub metadata_string : String,
 }
 
@@ -147,7 +147,7 @@ impl FrameMetadata {
             nvfd_address : unwrap_tag_as!(ifd, Software, u64),
             roi_address : unwrap_tag_as!(ifd, Artist, u64),
             sample_format : unwrap_tag_as!(ifd, SampleFormat, u16),
-            siff_compress : unwrap_tag_as!(ifd, Siff, u16),
+            siff_compress : ifd.get_tag(Siff).map(|x| x.value().into() as u16),
             metadata_string : String::new(),
         }
     }
@@ -221,19 +221,26 @@ impl FrameMetadata {
     /// println!("{}", metadata_string);
     /// ```
     pub fn metadata_string<I : IFD, ReaderT : Read + Seek>(ifd : &I, reader : &mut ReaderT)->String {
-        let string_length : u64 = match unwrap_tag_as!(ifd, Siff, u16) {
-            0 => {
-                unwrap_tag_as!(ifd, StripOffsets, u64)
-                - unwrap_tag_as!(ifd, ImageDescription, u64)
-            },
-            1 => {
-                unwrap_tag_as!(ifd, StripOffsets, u64)
-                - unwrap_tag_as!(ifd, ImageDescription, u64)
-                - unwrap_tag_as!(ifd, ImageWidth, u64)
-                * unwrap_tag_as!(ifd, ImageLength, u64)
-                * std::mem::size_of::<u16>() as u64
-            },
-            _ => return "Invalid Siff compression value".to_string(),
+        let mut string_length : u64 = 0;
+        if ifd.get_tag(Siff).is_none() {
+            string_length = unwrap_tag_as!(ifd, StripOffsets, u64)
+            - unwrap_tag_as!(ifd, ImageDescription, u64);
+        }
+        else{
+            string_length = match unwrap_tag_as!(ifd, Siff, u16) {
+                0 => {
+                    unwrap_tag_as!(ifd, StripOffsets, u64)
+                    - unwrap_tag_as!(ifd, ImageDescription, u64)
+                },
+                1 => {
+                    unwrap_tag_as!(ifd, StripOffsets, u64)
+                    - unwrap_tag_as!(ifd, ImageDescription, u64)
+                    - unwrap_tag_as!(ifd, ImageWidth, u64)
+                    * unwrap_tag_as!(ifd, ImageLength, u64)
+                    * std::mem::size_of::<u16>() as u64
+                },
+                _ => return "Invalid Siff compression value".to_string(),
+            };
         };
         let curr_pos = reader.stream_position().unwrap();
         reader.seek(std::io::SeekFrom::Start(unwrap_tag_as!(ifd, ImageDescription, u64))).unwrap();
@@ -469,7 +476,7 @@ pub fn get_epoch_timestamps_both<I : IFD, ReaderT : Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{TEST_FILE_PATH, APPENDED_TEXT_FILE};
+    use crate::tests::{TEST_FILE_PATH, APPENDED_TEXT_FILE, TIFF_SIFF};
     use crate::tiff::FileFormat;
     use std::fs::File;
     use std::io::BufReader;
@@ -482,31 +489,6 @@ mod tests {
         let ifds = file_format.get_ifd_vec(&mut reader);
         let metadata = FrameMetadata::from_ifd_and_file(&ifds[0], &mut reader).unwrap();
         println!("{:?}", metadata);
-
-        println!(
-            "Experiment time: {}",
-            FrameMetadata::frame_time_experiment_from_metadata_str(&metadata.metadata_string)
-        );
-
-        println!(
-            "Frame number: {}",
-            FrameMetadata::frame_number_from_metadata_str(&metadata.metadata_string)
-        );
-
-        println!(
-            "Epoch: {}",
-            FrameMetadata::frame_time_epoch_from_metadata_str(&metadata.metadata_string)
-        );
-
-        println!(
-            "Most recent system time: {}",
-            FrameMetadata::most_recent_system_time_from_metadata_str(&metadata.metadata_string).unwrap()
-        );
-
-        println!(
-            "Sync stamps: {:?}",
-            FrameMetadata::sync_stamps_from_metadata_str(&metadata.metadata_string)
-        );
 
         // Appended text needs a file that actually has text in it!
         reader = BufReader::new(File::open(APPENDED_TEXT_FILE).unwrap());
@@ -526,5 +508,12 @@ mod tests {
             "all appended text: {:?}",
             get_appended_text(&ifds_ref, &mut reader)
         );
+
+        reader = BufReader::new(File::open(TIFF_SIFF).unwrap());
+
+        let file_format = FileFormat::parse_filetype(&mut reader).unwrap();
+        let ifds = file_format.get_ifd_vec(&mut reader);
+        let metadata = FrameMetadata::from_ifd_and_file(&ifds[10], &mut reader).unwrap();
+        println!("{:?}", metadata);
     }
 }

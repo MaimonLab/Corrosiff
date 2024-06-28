@@ -3,6 +3,9 @@
 A `Rust`-based reader for `.siff` file data. An excuse to learn
 and use `Rust`, which I have to admit has been pretty enjoyable.
 
+While most functionality is `.siff`-exclusive (because it's built
+around arrival time data), it can read frames from `.tiff` files too.
+
 TODOS:
 
 - A real README.

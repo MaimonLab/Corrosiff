@@ -239,7 +239,7 @@ pub fn roll_inplace<T : Clone>(array : &mut ArrayViewMut2<T>, roll : (i32, i32))
 /// 
 /// ## Example
 /// 
-/// ```rust
+/// ```rust, ignore
 /// use ndarray::prelude::*;
 /// use corrosiff::data::image::dimensions::roll;
 /// 

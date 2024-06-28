@@ -2,6 +2,5 @@
 //! code
 //! 
 
-pub mod tiff;
 pub mod siff;
 
