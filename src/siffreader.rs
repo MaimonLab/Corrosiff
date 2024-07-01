@@ -140,14 +140,14 @@ impl SiffReader{
     /// * `std::io::Error` - If there is an error opening the file,
     /// it will be returned directly.
     /// 
-    pub fn open<P : AsRef<Path>>(filename : P) -> IOResult<Self> {
+    pub fn open<P : AsRef<Path>>(filename : P) -> Result<Self, CorrosiffError> {
 
         // Open the file and parse its formatting info
         let file = File::open(&filename)?;
         let mut buff = BufReader::new(&file);
         let file_format = {
             FileFormat::parse_filetype(&mut buff)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+            .map_err(|e| CorrosiffError::FileFormatError)
         }?;
 
         // A small buffer for reading the IFDs which are quite small, using a smaller

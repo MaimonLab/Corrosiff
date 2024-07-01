@@ -41,13 +41,14 @@ pub use data::time::ClockBase;
 /// reflects the major types of errors
 /// that occur in this library.
 #[derive(Debug)]
-pub enum CorrosiffError {
+pub enum CorrosiffError{
     IOError(std::io::Error),
     FramesError(FramesError),
     DimensionsError(data::image::DimensionsError),
     InvalidClockBase,
     NoSystemTimestamps,
     NotImplementedError,
+    FileFormatError,
 }
 
 // impl From<std::io::Error> for CorrosiffError {
@@ -72,7 +73,6 @@ impl From<binrw::io::Error> for CorrosiffError {
     fn from(err : binrw::io::Error) -> Self {
         CorrosiffError::IOError(std::io::Error::new(std::io::ErrorKind::InvalidData, err))
     }
-
 }
 
 impl std::error::Error for CorrosiffError {}
@@ -86,6 +86,7 @@ impl std::fmt::Display for CorrosiffError {
             CorrosiffError::InvalidClockBase => write!(f, "Invalid clock base for function called"),
             CorrosiffError::NoSystemTimestamps => write!(f, "No system clock timestamps for this file"),
             CorrosiffError::NotImplementedError => write!(f, "Not Implemented"),
+            CorrosiffError::FileFormatError => write!(f, "File format error -- invalid or incompletely-transferred siff file"),
         }
     }
 }
@@ -155,7 +156,7 @@ impl TiffMode {
 /// use corrosiff::open_siff;
 /// let reader = open_siff("file.siff");
 /// ```
-pub fn open_siff<P : AsRef<Path>>(filename : P) -> IOResult<siffreader::SiffReader> {
+pub fn open_siff<P : AsRef<Path>>(filename : P) -> Result<siffreader::SiffReader, CorrosiffError> {
     SiffReader::open(filename)
 }
 
@@ -316,7 +317,7 @@ pub fn siff_to_tiff(
     filename : & str,
     mode : TiffMode,
     save_path : Option<&String>,
-    ) -> IOResult<()>{
+    ) -> Result<(), CorrosiffError>{
 
     let file_path: PathBuf = PathBuf::from(filename);
 
@@ -330,8 +331,8 @@ pub fn siff_to_tiff(
 
     siffreader.write_header_to_file(&mut tiff_file, &mode)
     .map_err(|err| IOError::new(std::io::ErrorKind::InvalidData, err))?;
-    siffreader.write_tiff_frames_to_file(&mut tiff_file, None)
-    .map_err(|err| IOError::new(std::io::ErrorKind::InvalidData, err))
+    siffreader.write_tiff_frames_to_file(&mut tiff_file, None)?;
+    Ok(())
 }
 
 #[cfg(test)]
