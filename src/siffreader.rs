@@ -5,13 +5,11 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs::File,
-    io::Result as IOResult,
     io::Write,
     io::Seek,
     path::{Path, PathBuf}
 };
 
-use binrw::BinWrite;
 use binrw::io::BufReader;
 use itertools::izip;
 use ndarray::prelude::*;
@@ -22,10 +20,7 @@ use rayon::prelude::*;
 // these deeper in the module?
 use crate::{
     TiffMode,
-    utils::{
-        parallelize_op,
-        FramesError,
-    },
+    utils::{parallelize_op,FramesError,},
     CorrosiffError,
     tiff::{
         FileFormat,
@@ -34,35 +29,11 @@ use crate::{
         dimensions_consistent,
     },
     data::image::{
-        SiffFrame,
-        load_array_intensity,
-        load_array_intensity_registered,
-        load_array_tau_d,
-        load_array_tau_d_registered,
-        sum_intensity_mask,
-        sum_intensity_mask_registered,
-        sum_intensity_masks,
-        sum_intensity_masks_registered,
-        load_flim_empirical_and_intensity_arrays,
-        load_flim_empirical_and_intensity_arrays_registered,
-        sum_lifetime_intensity_mask,
-        sum_lifetime_intensity_mask_registered,
-        sum_lifetime_intensity_masks,
-        sum_lifetime_intensity_masks_registered,
-        load_histogram,
-        load_histogram_mask,
-        load_histogram_mask_registered,
+        load::*,
         DimensionsError,
         Dimensions,
     },
-    metadata::{
-        FrameMetadata,
-        get_experiment_timestamps,
-        get_epoch_timestamps_laser,
-        get_epoch_timestamps_system,
-        get_epoch_timestamps_both,
-        get_appended_text,
-    }
+    metadata::{FrameMetadata,getters::*,},
 };
 
 pub type RegistrationDict = HashMap<u64, (i32, i32)>;

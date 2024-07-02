@@ -22,7 +22,7 @@ use crate::{
     tiff::{Tag, TiffTagID::{Siff, StripByteCounts, StripOffsets}, IFD}, CorrosiffError,
 };
 
-use super::load_array_intensity;
+use super::load::load_array_intensity;
 
 #[binrw::parser(reader)]
 fn _load_tau_d_raw<T : Into<u64>>(

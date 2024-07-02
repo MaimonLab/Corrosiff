@@ -473,6 +473,16 @@ pub fn get_epoch_timestamps_both<I : IFD, ReaderT : Read + Seek>(
     Ok(vec_out)
 }
 
+pub mod getters{
+    pub use super::{
+        get_experiment_timestamps,
+        get_epoch_timestamps_laser,
+        get_epoch_timestamps_system,
+        get_appended_text,
+        get_epoch_timestamps_both,
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
