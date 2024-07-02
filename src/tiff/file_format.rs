@@ -254,7 +254,8 @@ impl FileFormat{
         let tau_bin_ptr = tau_bin_ptr + needle.len();
         let tau_bin_len = self.nvfd[tau_bin_ptr..].find("\n")?;
         let tau_bin = self.nvfd[tau_bin_ptr..tau_bin_ptr+tau_bin_len].trim();
-        tau_bin.parse::<u32>().ok()
+        //tau_bin.parse::<u32>().ok()
+        tau_bin.parse::<u32>().map(|x| x + 2).ok()
     }
 
     /// Returns the size of a single bin in picoseconds
