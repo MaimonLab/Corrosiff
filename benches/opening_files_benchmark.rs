@@ -27,6 +27,18 @@ fn criterion_benchmark(c: &mut Criterion) {
     |b| b.iter(|| black_box(open_short_siff_test()))
     );
     c.bench_function("open a long siff file", |b| b.iter(|| black_box(open_long_siff_test())));
+
+    c.bench_function("Scan timestamps for short siff",
+    |b| b.iter(|| black_box(corrosiff::SiffReader::scan_timestamps(
+        "/Users/stephen/Desktop/Data/imaging/2024-04/2024-04-07/Dh31_LexA_LKir_LGFlamp1/Fly1/BarOnAtTen_1.siff"
+       ).unwrap()))
+    );
+
+    c.bench_function("Scan timestamps for long siff",
+    |b| b.iter(|| black_box(corrosiff::SiffReader::scan_timestamps(
+        "/Users/stephen/Desktop/Data/imaging/2024-04/2024-04-17/21Dhh_GCaFLITS/Fly1/Flashes_1.siff"
+       ).unwrap()))
+    );
 }
 
 criterion_group!(benches, criterion_benchmark);

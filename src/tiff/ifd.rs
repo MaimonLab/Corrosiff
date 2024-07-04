@@ -246,36 +246,54 @@ pub struct IFDIterator<'reader, S, T> where S : SeekRead , T : IFD {
 
 impl <'a, S, IFDT> IFDIterator<'a, S, IFDT>
     where S : SeekRead, IFDT : IFD,
-    for<'args> <() as BinRead>::Args<'args> : Default {
+    for<'args> <IFDT as BinRead>::Args<'args> : Default {
 
-        /// TODO - Implement and test!! The generic needs to take in the
-        /// IFD type?
-        ///
-        /// Creates a new `IFDIterator` object from an object that
-        /// can read and seek and the location of the first IFD (so that
-        /// it can parse it and find the subsequent IFDs).
-        /// 
-        /// ## Arguments
-        /// 
-        /// * `reader` - A reader that can read and seek
-        /// * `first_ifd` - The location of the first IFD in the file
-        /// 
-        /// ## Returns
-        /// 
-        /// * `IFDIterator` - An iterator object that can be used to read
-        /// 
-        /// ## Example
-        /// 
-        /// ```rust, ignore
-        /// ```
-        #[allow(dead_code)]
-        fn new(reader : &'a mut S, first_ifd : IFDT::PointerSize) -> Self {
-            IFDIterator{
-                reader,
-                to_next : first_ifd,
-            }
+    /// TODO - Implement and test!! The generic needs to take in the
+    /// IFD type?
+    ///
+    /// Creates a new `IFDIterator` object from an object that
+    /// can read and seek and the location of the first IFD (so that
+    /// it can parse it and find the subsequent IFDs).
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `reader` - A reader that can read and seek
+    /// * `first_ifd` - The location of the first IFD in the file
+    /// 
+    /// ## Returns
+    /// 
+    /// * `IFDIterator` - An iterator object that can be used to read
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// ```
+    #[allow(dead_code)]
+    fn new(reader : &'a mut S, first_ifd : IFDT::PointerSize) -> Self {
+        IFDIterator{
+            reader,
+            to_next : first_ifd,
         }
-        
+    }
+
+    /// Returns the last IFD before the actual last IFD -- i.e. the
+    /// IFD guaranteed to have a full frame and metadata after it.
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Option<IFDT>` - The last IFD in the file corresponding
+    /// to a complete frame. Returns `None` if the file has only one
+    /// complete IFD.
+    /// 
+    pub fn last_complete(&mut self) -> Option<<IFDIterator<'a, S, IFDT> as Iterator>::Item> {
+        let mut back_two = self.next()?;
+        let mut back_one = self.next()?;
+        while let Some(next) = self.next() {
+            back_two = back_one;
+            back_one = next;
+        }
+        Some(back_two)
+    }
 }
 
 impl<'a, S, IFDT> Iterator for IFDIterator<'a, S, IFDT>

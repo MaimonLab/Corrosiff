@@ -205,6 +205,26 @@ impl FileFormat{
         })
     }
 
+    /// Just reads and stores enough to determine how to find IFDs.
+    pub fn minimal_filetype<'a, 'b, T>(buffer : &'a mut T) -> Result<Self, String>
+        where T : Read + Seek {
+            let siff_header = SiffHeader::read(buffer)
+            .map_err(
+                |err| format!("Error reading header: {}", err)
+            )?;
+            Ok(
+                FileFormat {
+                    _tiff_type : match &siff_header.tiffheader {
+                        TiffHeader::Default {..} => TiffType::Tiff,
+                        TiffHeader::BigTiff {..} => TiffType::BigTiff,
+                    },
+                    siff_header,
+                    nvfd : String::new(),
+                    roi_string : String::new(),
+                }
+            ) 
+        }
+
     /// Returns the location of the first IFD
     /// in the file (from start).
     /// 

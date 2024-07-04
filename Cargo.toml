@@ -28,9 +28,9 @@ criterion = { version = "0.5", features = ["html_reports"] }
 name = "opening_files_benchmark"
 harness = false
 
-[[bench]]
-name = "read_frames_benchmark"
-harness = false
+# [[bench]]
+# name = "read_frames_benchmark"
+# harness = false
 
 # [[bench]]
 # name = "mask_frames_benchmark"

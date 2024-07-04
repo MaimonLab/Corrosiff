@@ -136,6 +136,34 @@ impl SiffReader{
         )
     }
 
+    /// A fast parse that returns just the first and last timestamps in the file.
+    /// Uses the system timestamps.
+    pub fn scan_timestamps<P: AsRef<Path>>(filename: P) -> Result<(u64, u64), CorrosiffError> {
+        let file = File::open(&filename)?;
+        let mut buff = BufReader::new(&file);
+        let file_format = {
+            FileFormat::minimal_filetype(&mut buff)
+            .map_err(|e| CorrosiffError::FileFormatError)
+        }?;
+
+        let mut wee_buff = BufReader::with_capacity(400, &file);
+        //let mut end_buff = 
+        let mut ifds = file_format.get_ifd_iter(&mut wee_buff);
+        // let mut ifd_vec = file_format.get_ifd_iter(&mut wee_buff).collect::<Vec<_>>();
+        let (first, last) = (
+            get_epoch_timestamps_system(
+                &[&ifds.next().ok_or_else(||CorrosiffError::FileFormatError)?],
+                &mut ifds.reader
+            )?[0].unwrap(),
+            get_epoch_timestamps_system(
+                &[&ifds.last().ok_or_else(||CorrosiffError::FileFormatError)?],
+                &mut wee_buff
+            )?[0].unwrap()
+        );  
+
+        Ok((first, last))
+    }
+
     /// Returns number of frames in the file
     /// (including flyback etc).
     pub fn num_frames(&self) -> usize {
@@ -2324,6 +2352,17 @@ mod tests {
     fn test_open_siff() {
         let reader = SiffReader::open(TEST_FILE_PATH);
         assert!(reader.is_ok());
+    }
+
+    #[test]
+    fn test_scan_timestamps(){
+        let timestamps = SiffReader::scan_timestamps(TEST_FILE_PATH);
+        assert!(timestamps.is_ok());
+        let (start, end) = timestamps.unwrap();
+        assert!(start <= end);
+        assert_ne!(start, 0);
+        assert_ne!(end, 0);
+        println!("Start: {}, End: {}", start, end);
     }
 
     #[test]

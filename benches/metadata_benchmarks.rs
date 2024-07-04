@@ -25,6 +25,16 @@ fn criterion_benchmark_frame_metadata(c: &mut Criterion) {
     );
 
     read_bench.bench_with_input(
+        BenchmarkId::new("Scan timestamps",
+            0,
+        ),
+        &(),
+        |bench, _| {
+            bench.iter(|| black_box(corrosiff::SiffReader::scan_timestamps(LONG_SIFF_PATH).unwrap()))
+        },
+    );
+
+    read_bench.bench_with_input(
         BenchmarkId::new("Get 40 experiment timestamps",
             40,
         ),
