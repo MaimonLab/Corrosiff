@@ -158,35 +158,34 @@ impl SiffReader{
             .map_err(|e| CorrosiffError::FileFormatError)
         }?;
 
-        let mut for_ifd = std::fs::File::open(&filename)?;
-        for_ifd.seek(std::io::SeekFrom::Start(file_format.first_ifd_val()))?;
-        let first_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
-        let mut ifd_ptrs = IFDPtrIterator::new(
-            &mut file,
-            file_format.first_ifd_val()
-        );
-        for_ifd.seek(std::io::SeekFrom::Start(ifd_ptrs.last_complete().unwrap()))?;
-        let last_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
+        // let mut for_ifd = std::fs::File::open(&filename)?;
+        // for_ifd.seek(std::io::SeekFrom::Start(file_format.first_ifd_val()))?;
+        // let first_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
+        // let mut ifd_ptrs = IFDPtrIterator::new(
+        //     &mut file,
+        //     file_format.first_ifd_val()
+        // );
+        // for_ifd.seek(std::io::SeekFrom::Start(ifd_ptrs.last_complete().unwrap()))?;
+        // let last_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
 
-        let first = get_epoch_timestamps_laser(&[&first_ifd], &mut file)[0];
-        let last = get_epoch_timestamps_laser(&[&last_ifd], &mut file)[0];
-
-        Ok((first, last))
-        // first = IFD::new(&mut for_ifd);
-        // let mut wee_buff = BufReader::with_capacity(400, &file);
-        // let mut ifds = file_format.get_ifd_iter(&mut wee_buff);
-        // let (first, last) = (
-        //     get_epoch_timestamps_laser(
-        //         &[&ifds.next().ok_or_else(||CorrosiffError::FileFormatError)?],
-        //         &mut ifds.reader
-        //     )[0],
-        //     get_epoch_timestamps_laser(
-        //         &[&ifds.last().ok_or_else(||CorrosiffError::FileFormatError)?],
-        //         &mut file
-        //     )[0]
-        // );  
+        // let first = get_epoch_timestamps_laser(&[&first_ifd], &mut file)[0];
+        // let last = get_epoch_timestamps_laser(&[&last_ifd], &mut file)[0];
 
         // Ok((first, last))
+        let mut wee_buff = BufReader::with_capacity(400, &file);
+        let mut ifds = file_format.get_ifd_iter(&mut wee_buff);
+        let (first, last) = (
+            get_epoch_timestamps_laser(
+                &[&ifds.next().ok_or_else(||CorrosiffError::FileFormatError)?],
+                &mut ifds.reader
+            )[0],
+            get_epoch_timestamps_laser(
+                &[&ifds.last().ok_or_else(||CorrosiffError::FileFormatError)?],
+                &mut file
+            )[0]
+        );  
+
+        Ok((first, last))
     }
 
     /// Returns number of frames in the file
