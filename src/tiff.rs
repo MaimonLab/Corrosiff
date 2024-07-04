@@ -7,5 +7,5 @@ mod ifd;
 mod tags;
 
 pub use tags::{Tag, TiffTagID};
-pub use ifd::{IFD, BigTiffIFD};
+pub use ifd::{IFD, BigTiffIFD, IFDPtrIterator};
 pub use file_format::{FileFormat, dimensions_consistent};

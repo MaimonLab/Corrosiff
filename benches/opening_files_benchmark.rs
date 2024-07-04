@@ -23,10 +23,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     // c.bench_function("open a mounted siff file", 
     // |b| b.iter(|| black_box(open_mount_siff()))
     // );
-    c.bench_function("open a short siff file",
-    |b| b.iter(|| black_box(open_short_siff_test()))
-    );
-    c.bench_function("open a long siff file", |b| b.iter(|| black_box(open_long_siff_test())));
+    // c.bench_function("open a short siff file",
+    // |b| b.iter(|| black_box(open_short_siff_test()))
+    // );
+    // c.bench_function("open a long siff file", |b| b.iter(|| black_box(open_long_siff_test())));
 
     c.bench_function("Scan timestamps for short siff",
     |b| b.iter(|| black_box(corrosiff::SiffReader::scan_timestamps(

@@ -10,6 +10,7 @@
 //! 
 //! NYPD KKK IFD they're all the same
 
+use core::num;
 use std::fmt::Debug;
 use std::iter::Iterator;
 use binrw::{
@@ -320,6 +321,79 @@ impl<'a, S, IFDT> Iterator for IFDIterator<'a, S, IFDT>
         (0, None)
     }
 }   
+
+/// Does not read the whole IFD, only the number of tags and the next IFD
+pub struct IFDPtrIterator<'a, S> where S : SeekRead {
+    reader : &'a mut S,
+    to_next : u64,
+}
+
+impl <'a, S> IFDPtrIterator<'a, S>
+    where S : SeekRead {
+
+    /// Creates a new `MinimalIFDIterator` object from an object that
+    /// can read and seek and the location of the first IFD (so that
+    /// it can parse it and find the subsequent IFDs).
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `reader` - A reader that can read and seek
+    /// * `first_ifd` - The location of the first IFD in the file
+    /// 
+    /// ## Returns
+    /// 
+    /// * `MinimalIFDIterator` - An iterator object that can be used to read
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// ```
+    pub fn new(reader : &'a mut S, first_ifd : u64) -> Self {
+        IFDPtrIterator{
+            reader,
+            to_next : first_ifd,
+        }
+    }
+
+    pub fn last_complete(&mut self) -> Option<u64> {
+        let mut back_two = self.next()?;
+        let mut back_one = self.next()?;
+        while let Some(next) = self.next() {
+            back_two = back_one;
+            back_one = next;
+        }
+        Some(back_two)
+    }
+}
+
+impl <'a, S> Iterator for IFDPtrIterator<'a, S>
+    where S : SeekRead {
+    type Item = u64;
+
+    fn next(&mut self) -> Option::<Self::Item> {
+        if self.to_next == 0 {
+            return None
+        }
+        self.reader.seek(SeekFrom::Start(self.to_next.into()))
+            .ok()?;
+
+        let mut num_tags = vec![0u8; 8];
+        self.reader.read_exact(&mut num_tags).ok()?;
+        let num_tags = bytemuck::cast_slice::<u8, u64>(&num_tags).first().unwrap().clone();
+        let tag_size = 20 as u64;
+
+        self.reader.seek(SeekFrom::Current((num_tags * tag_size) as i64)).ok()?;
+        let mut next_ifd = vec![0; 8];
+        self.reader.read_exact(&mut next_ifd).ok()?;
+        let next_ifd = bytemuck::cast_slice::<u8, u64>(&next_ifd).first().unwrap().clone();
+        self.to_next = next_ifd;
+        Some(next_ifd)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>){
+        (0, None)
+    }
+}
 
 impl Debug for TiffIFD {
     fn fmt(&self, f : &mut std::fmt::Formatter) -> std::fmt::Result {

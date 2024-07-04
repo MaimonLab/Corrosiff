@@ -240,6 +240,12 @@ pub fn time_axis_epoch_both(
     siffreader.get_epoch_timestamps_both(siffreader.frames_vec().as_slice())
 }
 
+pub fn scan_timestamps<P: AsRef<Path>>(
+    file_path : &P,
+) -> Result<(u64,u64), CorrosiffError> {
+    SiffReader::scan_timestamps(file_path)
+}
+
 /// `get_frames(path, frames, registration)` returns the intensity data of the
 /// specified frames from the `.siff` file, with optional in-place registration.
 /// 

@@ -11,6 +11,7 @@ use std::{
 };
 
 use binrw::io::BufReader;
+use binrw::BinRead;
 use itertools::izip;
 use ndarray::prelude::*;
 use rayon::prelude::*;
@@ -27,6 +28,7 @@ use crate::{
         BigTiffIFD,
         IFD,
         dimensions_consistent,
+        IFDPtrIterator,
     },
     data::image::{
         load::*,
@@ -138,30 +140,53 @@ impl SiffReader{
 
     /// A fast parse that returns just the first and last timestamps in the file.
     /// Uses the system timestamps.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `filename` - A string slice that holds the name of the file to open
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<(u64, u64), CorrosiffError>` - A tuple of two `u64` values
+    /// corresponding to the first and last timestamps in the file in epoch
+    /// time (seconds since 1970-01-01 00:00:00 UTC).
     pub fn scan_timestamps<P: AsRef<Path>>(filename: P) -> Result<(u64, u64), CorrosiffError> {
-        let file = File::open(&filename)?;
-        let mut buff = BufReader::new(&file);
+        let mut file = File::open(&filename)?;
+        // let mut buff = BufReader::new(&file);
         let file_format = {
-            FileFormat::minimal_filetype(&mut buff)
+            FileFormat::minimal_filetype(&mut file)
             .map_err(|e| CorrosiffError::FileFormatError)
         }?;
 
-        let mut wee_buff = BufReader::with_capacity(400, &file);
-        //let mut end_buff = 
-        let mut ifds = file_format.get_ifd_iter(&mut wee_buff);
-        // let mut ifd_vec = file_format.get_ifd_iter(&mut wee_buff).collect::<Vec<_>>();
-        let (first, last) = (
-            get_epoch_timestamps_system(
-                &[&ifds.next().ok_or_else(||CorrosiffError::FileFormatError)?],
-                &mut ifds.reader
-            )?[0].unwrap(),
-            get_epoch_timestamps_system(
-                &[&ifds.last().ok_or_else(||CorrosiffError::FileFormatError)?],
-                &mut wee_buff
-            )?[0].unwrap()
-        );  
+        let mut for_ifd = std::fs::File::open(&filename)?;
+        for_ifd.seek(std::io::SeekFrom::Start(file_format.first_ifd_val()))?;
+        let first_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
+        let mut ifd_ptrs = IFDPtrIterator::new(
+            &mut file,
+            file_format.first_ifd_val()
+        );
+        for_ifd.seek(std::io::SeekFrom::Start(ifd_ptrs.last_complete().unwrap()))?;
+        let last_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
+
+        let first = get_epoch_timestamps_laser(&[&first_ifd], &mut file)[0];
+        let last = get_epoch_timestamps_laser(&[&last_ifd], &mut file)[0];
 
         Ok((first, last))
+        // first = IFD::new(&mut for_ifd);
+        // let mut wee_buff = BufReader::with_capacity(400, &file);
+        // let mut ifds = file_format.get_ifd_iter(&mut wee_buff);
+        // let (first, last) = (
+        //     get_epoch_timestamps_laser(
+        //         &[&ifds.next().ok_or_else(||CorrosiffError::FileFormatError)?],
+        //         &mut ifds.reader
+        //     )[0],
+        //     get_epoch_timestamps_laser(
+        //         &[&ifds.last().ok_or_else(||CorrosiffError::FileFormatError)?],
+        //         &mut file
+        //     )[0]
+        // );  
+
+        // Ok((first, last))
     }
 
     /// Returns number of frames in the file
