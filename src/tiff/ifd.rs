@@ -380,8 +380,10 @@ impl <'a, S> Iterator for IFDPtrIterator<'a, S>
         let mut num_tags = vec![0u8; 8];
         self.reader.read_exact(&mut num_tags).ok()?;
         let num_tags = bytemuck::cast_slice::<u8, u64>(&num_tags).first().unwrap().clone();
+        // let num_tags = 19;
         let tag_size = 20 as u64;
 
+        // self.reader.seek(SeekFrom::Start(self.to_next + num_tags*tag_size)).ok()?;
         self.reader.seek(SeekFrom::Current((num_tags * tag_size) as i64)).ok()?;
         let mut next_ifd = vec![0; 8];
         self.reader.read_exact(&mut next_ifd).ok()?;

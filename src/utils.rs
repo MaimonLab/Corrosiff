@@ -30,6 +30,17 @@ impl From<std::io::Error> for FramesError {
     }
 }
 
+impl From<binrw::Error> for FramesError {
+    fn from(err : binrw::Error) -> Self {
+        FramesError::IOError(
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                err.to_string()
+            )
+        )
+    }
+}
+
 impl std::error::Error for FramesError {}
 
 impl std::fmt::Display for FramesError {

@@ -30,7 +30,7 @@ fn criterion_benchmark_frame_metadata(c: &mut Criterion) {
         ),
         &(),
         |bench, _| {
-            bench.iter(|| black_box(corrosiff::SiffReader::scan_timestamps(LONG_SIFF_PATH).unwrap()))
+            bench.iter(|| black_box(corrosiff::scan_timestamps(&LONG_SIFF_PATH).unwrap()))
         },
     );
 

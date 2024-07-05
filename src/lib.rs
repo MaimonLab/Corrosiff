@@ -16,10 +16,12 @@
 use std::{
     io::Result as IOResult,
     io::Error as IOError,
+    io::Seek,
     path::{Path,PathBuf},
     fs::File,
     collections::HashMap,
 };
+use binrw::BinRead;
 
 use ndarray::prelude::*;
 
@@ -240,10 +242,105 @@ pub fn time_axis_epoch_both(
     siffreader.get_epoch_timestamps_both(siffreader.frames_vec().as_slice())
 }
 
+/// Finds the first timestamp in the `.siff` file and
+/// returns it in nanoseconds since epoch
+/// 
+/// ## Arguments
+/// 
+/// * `file_path` - The path of the file to scan
+/// 
+/// ## Returns
+/// 
+/// * `Result<u64, CorrosiffError>` - The timestamp of the first frame
+/// in nanoseconds since the Unix epoch (1970-01-01).
+/// 
+/// ## See also
+/// 
+/// - `scan_timestamps` for the timestamps of the first and last frames
+/// (considerably slower)
+pub fn scan_first_timestamp<P : AsRef<Path>>(file_path : &P)
+-> Result<u64, CorrosiffError> {
+    let mut file = File::open(file_path)?;
+
+    let file_format = tiff::FileFormat::minimal_filetype(&mut file)
+    .map_err(|_| CorrosiffError::FileFormatError)?;
+
+    file.seek(std::io::SeekFrom::Start(file_format.first_ifd_val())).unwrap();
+
+    let first_ifd = tiff::BigTiffIFD::read(&mut file)
+    .map_err(|_| CorrosiffError::FileFormatError)?;
+
+    Ok(
+        metadata::get_epoch_timestamps_laser(
+            &[&first_ifd],
+            &mut file
+        )[0]
+    )
+}
+
+/// Finds the timestamps of the first and last
+/// frames of the requested file and returns them
+/// as nanoseconds since the Unix epoch (1970-01-01).
+/// Uses the system clock stamps of the microscope
+/// computer. Almost as slow as just opening
+/// the file and querying it yourself though!
+/// 
+/// ## Arguments
+/// 
+/// * `file_path` - The path of the file to scan
+/// 
+/// ## Returns
+/// 
+/// * `Result<(u64,u64), CorrosiffError>` - A tuple of two `u64` values
+/// representing the timestamps of the first and last frames, respectively.
+/// 
+/// ## See also
+/// 
+/// - `scan_first_timestamp` for just the timestamp of the first frame,
+/// which is considerably faster because it does not need to crawl through
+/// every IFD to find the last one.
 pub fn scan_timestamps<P: AsRef<Path>>(
     file_path : &P,
 ) -> Result<(u64,u64), CorrosiffError> {
-    SiffReader::scan_timestamps(file_path)
+    let mut file = File::open(file_path)?;
+
+    let file_format = tiff::FileFormat::minimal_filetype(&mut file)
+    .map_err(|e| CorrosiffError::FileFormatError)?;
+
+    let mut ifd_buff = binrw::io::BufReader::with_capacity(400, &file);
+    let mut ifds = file_format.get_ifd_iter(&mut ifd_buff);
+
+    Ok(
+        (
+            metadata::get_epoch_timestamps_laser(
+                &[&ifds.next().ok_or_else(|| CorrosiffError::FileFormatError)?],
+                &mut ifds.reader
+            )[0],
+
+            metadata::get_epoch_timestamps_laser(
+                &[&ifds.last().ok_or_else(||CorrosiffError::FileFormatError)?],
+                &mut file
+            )[0]
+        )
+    )
+
+    // Should I try using the IFDPtrIterator? Doesn't seem to
+    // actually provide much speedup....
+
+    // let mut for_ifd = std::fs::File::open(&filename)?;
+    // for_ifd.seek(std::io::SeekFrom::Start(file_format.first_ifd_val()))?;
+    // let first_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
+    // let mut ifd_ptrs = IFDPtrIterator::new(
+    //     &mut file,
+    //     file_format.first_ifd_val()
+    // );
+    // for_ifd.seek(std::io::SeekFrom::Start(ifd_ptrs.last_complete().unwrap()))?;
+    // let last_ifd = BigTiffIFD::read(&mut for_ifd).unwrap();
+
+    // let first = get_epoch_timestamps_laser(&[&first_ifd], &mut file)[0];
+    // let last = get_epoch_timestamps_laser(&[&last_ifd], &mut file)[0];
+
+    // Ok((first, last))
 }
 
 /// `get_frames(path, frames, registration)` returns the intensity data of the
@@ -364,6 +461,23 @@ mod tests {
         assert!(reader.is_ok());
 
         assert!(reader.unwrap().filename().contains("BarOnAtTen_1.siff"));
+    }
+
+    #[test]
+    fn test_scan_timestamps(){
+        let timestamps = scan_timestamps(&TEST_FILE_PATH);
+        assert!(timestamps.is_ok());
+        let (start, end) = timestamps.unwrap();
+        assert!(start <= end);
+        assert_ne!(start, 0);
+        assert_ne!(end, 0);
+
+        let first = scan_first_timestamp(&TEST_FILE_PATH);
+
+        assert!(first.is_ok());
+        assert_eq!(first.unwrap(), start);
+
+        println!("Start: {}, End: {}", start, end);
     }
 
     #[test]
