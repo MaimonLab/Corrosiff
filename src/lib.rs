@@ -305,7 +305,7 @@ pub fn scan_timestamps<P: AsRef<Path>>(
     let mut file = File::open(file_path)?;
 
     let file_format = tiff::FileFormat::minimal_filetype(&mut file)
-    .map_err(|e| CorrosiffError::FileFormatError)?;
+    .map_err(|_| CorrosiffError::FileFormatError)?;
 
     let mut ifd_buff = binrw::io::BufReader::with_capacity(400, &file);
     let mut ifds = file_format.get_ifd_iter(&mut ifd_buff);
