@@ -1023,6 +1023,109 @@ impl SiffReader{
         Ok(array)
     }
 
+    /// Extracts a framewise photon arrival time histogram
+    /// restricted only to the pixels in the region of interest.
+    /// Uses a volume mask which cycles through the z-dimension
+    /// alongside the frames
+    /// 
+    pub fn get_histogram_mask_volume(
+        &self, frames : &[u64], mask : &ArrayView3<bool>, registration : Option<&RegistrationDict>
+    ) -> Result<Array2<u64>, CorrosiffError> {
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+
+        // Check that the frames share a shape with the mask
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        if array_dims.to_tuple() != (mask.dim().1, mask.dim().2) {
+            return Err(FramesError::DimensionsError(
+                DimensionsError::MismatchedDimensions{
+                    required : array_dims,
+                    requested : Dimensions::from_tuple((mask.dim().1, mask.dim().2)),
+                }
+            ).into());
+        }
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let mut array = Array2::<u64>::zeros((frames.len(), self.file_format.num_flim_tau_bins().unwrap() as usize));
+
+        // Another disappointing lack of macro magic
+        let chunk_size = 2500;
+
+        let n_threads = frames.len()/chunk_size + 1;
+        let remainder = frames.len() % n_threads;
+
+        // Compute the bounds for each threads operation
+        let mut offsets = vec![];
+        let mut start = 0;
+
+        for i in 0..n_threads {
+            let end = start + chunk_size + if i < remainder { 1 } else { 0 };
+            offsets.push((start, end));
+            start = end;
+        }
+
+        // Create an array of chunks to parallelize
+        let array_chunks : Vec<_> = array.axis_chunks_iter_mut(Axis(0), chunk_size).collect();
+
+        array_chunks.into_par_iter().enumerate().try_for_each(
+            |(chunk_idx, mut chunk)| -> Result<(), CorrosiffError> {
+            // Get the frame numbers and ifds for the frames in the chunk
+            let start = chunk_idx * chunk_size;
+            let end = ((chunk_idx + 1) * chunk_size).min(frames.len());
+
+            let local_frames = &frames[start..end];
+            let mut local_f = File::open(&self._filename).unwrap();
+
+            let roi_cycle = mask.axis_iter(Axis(0)).cycle();
+            // roi_cycle needs to be incremented by the start value
+            // modulo the length of the mask
+            let roi_cycle = roi_cycle.skip(start % mask.dim().0);
+
+            match registration {
+                Some(reg) => {
+                    izip!(local_frames.iter(), chunk.axis_iter_mut(Axis(0)), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_chunk, roi_plane)|
+                            -> Result<(), CorrosiffError> {
+                            load_histogram_mask_registered(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_chunk,
+                                &roi_plane,
+                                *reg.get(&this_frame).unwrap(),
+                            )?; Ok(())
+                        })?;
+                },
+                None => {
+                    izip!(local_frames.iter(), chunk.axis_iter_mut(Axis(0)), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_chunk, roi_cycle)|
+                            -> Result<(), CorrosiffError> {
+                            load_histogram_mask(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_chunk,
+                                &roi_cycle,
+                            )?; Ok(())
+                        })?;
+                }
+            }
+            Ok(())
+            }
+        )?;
+        Ok(array)
+    }
+
     /// Sums the intensity of the frames requested within the
     /// region of interest (ROI) specified by the boolean array
     /// `roi`. The ROI should be the same shape as the frames' 
@@ -2458,6 +2561,24 @@ mod tests {
         let hist = hist.unwrap();
         let frames = reader.get_frames_intensity(&framelist, None);
         assert_eq!(hist.sum(), frames.unwrap().fold(0 as u64, |sum, &x| sum + (x as u64)));
+    }
+
+    #[test]
+    fn test_masked_histograms() {
+        let reader = SiffReader::open(TEST_FILE_PATH).unwrap();
+
+        let mut three_d_roi = Array3::<bool>::from_elem(
+            (6, reader.image_dims().unwrap().ydim as usize, reader.image_dims().unwrap().xdim as usize),
+            true
+        );
+
+        three_d_roi.mapv_inplace(|_| rand::random::<bool>());
+
+        let frames = (0..300).map(|x| x as u64).collect::<Vec<_>>();
+
+        // Test whether the masked and masked_volume methods agree
+        // TODO implement...
+        
     }
 
     #[test]
