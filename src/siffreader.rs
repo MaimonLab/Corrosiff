@@ -118,7 +118,7 @@ impl SiffReader{
         let mut buff = BufReader::new(&file);
         let file_format = {
             FileFormat::parse_filetype(&mut buff)
-            .map_err(|e| CorrosiffError::FileFormatError)
+            .map_err(|_| CorrosiffError::FileFormatError)
         }?;
 
         // A small buffer for reading the IFDs which are quite small, using a smaller

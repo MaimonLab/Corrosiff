@@ -1,5 +1,6 @@
 pub mod histogram;
 pub mod empirical_lifetime;
+pub mod phasor;
 
 use bytemuck::try_cast_slice;
 use binrw::io::{Read, Seek};

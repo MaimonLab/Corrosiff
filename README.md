@@ -10,6 +10,10 @@ TODOS:
 
 - A real README.
 
+- More methods for estimating "lifetime" (e.g. RLD, MLE...)
+
+- Phasor!
+
 - `mask` methods for `tau_d` or for `.tiff` files.
 
 - Fast timestamp checking without reading as much metadata?

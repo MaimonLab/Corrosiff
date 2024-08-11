@@ -221,7 +221,7 @@ impl FrameMetadata {
     /// println!("{}", metadata_string);
     /// ```
     pub fn metadata_string<I : IFD, ReaderT : Read + Seek>(ifd : &I, reader : &mut ReaderT)->String {
-        let mut string_length : u64 = 0;
+        let string_length : u64;
         if ifd.get_tag(Siff).is_none() {
             string_length = unwrap_tag_as!(ifd, StripOffsets, u64)
             - unwrap_tag_as!(ifd, ImageDescription, u64);
