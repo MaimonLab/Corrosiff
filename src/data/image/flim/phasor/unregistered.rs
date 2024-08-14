@@ -49,12 +49,15 @@ pub fn _load_flim_intensity_phasor_compressed<T : Into<u64>>(
     )?;
 
     let mut arrival_time_pointer : usize = 0;
+
+    let lookup_len = cos_lookup.len();
+
     intensity_array.iter().zip(phasor_array.iter_mut()).for_each( | (intensity, pixel) | {
         arrival_times[arrival_time_pointer..arrival_time_pointer+*intensity as usize].iter()
             .for_each(|&arrival_time| {
                 *pixel += Complex::new(
-                    cos_lookup[arrival_time as usize],
-                    sin_lookup[arrival_time as usize]
+                    cos_lookup[arrival_time as usize % lookup_len],
+                    sin_lookup[arrival_time as usize % lookup_len]
                 );
             }
         );
@@ -84,8 +87,8 @@ pub fn _load_flim_intensity_phasor_raw<T : Into<u64>>(
             let x = photon_to_x!(*siffphoton, 0, xdim);
             let tau = photon_to_tau_USIZE!(*siffphoton);
             phasor_array[[y, x]] += Complex::new(
-                cos_lookup[tau as usize],
-                sin_lookup[tau as usize]
+                cos_lookup[tau as usize % cos_lookup.len()],
+                sin_lookup[tau as usize % sin_lookup.len()]
             );
             intensity_array[[y, x]] += 1;
         }
@@ -118,8 +121,8 @@ pub fn _sum_mask_phasor_intensity_raw<T : Into<u64>>(
             let x = photon_to_x!(*siffphoton, 0, xdim);
             let tau = photon_to_tau_USIZE!(*siffphoton);
             *phasor_sum += Complex::new(
-                cos_lookup[tau as usize],
-                sin_lookup[tau as usize]
+                cos_lookup[tau as usize % cos_lookup.len()],
+                sin_lookup[tau as usize % sin_lookup.len()]
             ) * (mask[[y, x]] as u64 as f64);
             *intensity_sum += mask[[y, x]] as u64;
         }
@@ -158,8 +161,8 @@ pub fn _sum_masks_phasor_intensity_raw<T : Into<u64>>(
                     let tau = photon_to_tau_USIZE!(*siffphoton);
                     *lifetime_sum += mask[[y, x]] as u64 as f64 
                     * Complex::new(
-                        cos_lookup[tau as usize],
-                        sin_lookup[tau as usize]
+                        cos_lookup[tau as usize % cos_lookup.len()],
+                        sin_lookup[tau as usize % sin_lookup.len()]
                     );
                 }
             );
@@ -215,7 +218,10 @@ pub fn _sum_mask_phasor_intensity_compressed<T : Into<u64>>(
         *phasor_sum += (*maskpx as u64 as f64)
             * lifetime_data[lifetime_pointer..lifetime_pointer+*intensity as usize]
             .iter()
-            .map(|tau| Complex::new(cos_lookup[*tau as usize], sin_lookup[*tau as usize]))
+            .map(|tau| Complex::new(
+                cos_lookup[*tau as usize % cos_lookup.len()],
+                sin_lookup[*tau as usize % sin_lookup.len()]
+            ))
             .sum::<Complex<f64>>();
         lifetime_pointer += *intensity as usize;
     });
@@ -273,7 +279,10 @@ pub fn _sum_masks_phasor_intensity_compressed<T : Into<u64>>(
             *phasor_accumulator += (*maskpx as u64 as f64)
                 * lifetime_data[lifetime_pointer..lifetime_pointer+*intensity as usize]
                     .iter()
-                    .map(|&tau| Complex::new(cos_lookup[tau as usize], sin_lookup[tau as usize]))
+                    .map(|&tau| Complex::new(
+                        cos_lookup[tau as usize % cos_lookup.len()],
+                        sin_lookup[tau as usize % sin_lookup.len()]
+                    ))
                     .sum::<Complex<f64>>();
             lifetime_pointer += *intensity as usize;
         });

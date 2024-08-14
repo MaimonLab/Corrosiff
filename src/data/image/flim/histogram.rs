@@ -20,6 +20,13 @@ use crate::data::image::{
     dimensions::{roll,macros::*}
 };
 
+/// Crate level exports
+pub (crate) mod exports {
+    pub (crate) use super::load_histogram;
+    pub (crate) use super::load_histogram_mask;
+    pub (crate) use super::load_histogram_mask_registered;
+}
+
 /// Reads the data pointed to by the IFD and uses it to
 /// increment the counts of the histogram. Presumes
 /// the reader already points to the start of the main data.
@@ -351,7 +358,7 @@ mod tests{
         COMPRESSED_FRAME_NUM
     };
     use crate::tiff::FileFormat;
-    use crate::data::image::intensity::siff::SiffFrame;
+    use crate::data::image::intensity::siff::exports::SiffFrame;
 
     #[test]
     fn single_frame_histograms() {

@@ -52,7 +52,16 @@ mod unregistered;
 mod tiff;
 mod siff_frame;
 
-pub (crate) use siff_frame::SiffFrame;
+/// For easy package-level access to the intensity loading functions
+pub (crate) mod exports {
+    pub (crate) use super::siff_frame::SiffFrame;
+    pub (crate) use super::load_array as load_array_intensity;
+    pub (crate) use super::load_array_registered as load_array_intensity_registered;
+    pub (crate) use super::sum_mask as sum_intensity_mask;
+    pub (crate) use super::sum_mask_registered as sum_intensity_mask_registered;
+    pub (crate) use super::sum_masks as sum_intensity_masks;
+    pub (crate) use super::sum_masks_registered as sum_intensity_masks_registered;
+}
 
 
 /// Parses a raw `.siff` format frame and returns
@@ -485,6 +494,7 @@ pub fn sum_masks_registered<I : IFD, ReaderT: Read + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::exports::*;
     use crate::tests::{TEST_FILE_PATH, UNCOMPRESSED_FRAME_NUM, COMPRESSED_FRAME_NUM};
     use crate::tiff::BigTiffIFD;
 

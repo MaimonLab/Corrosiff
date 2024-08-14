@@ -14,6 +14,7 @@ use binrw::io::BufReader;
 use itertools::izip;
 use ndarray::prelude::*;
 use rayon::prelude::*;
+use num_complex::Complex;
 
 // my module structure is probably
 // too complex. Or I should hide some of
@@ -734,6 +735,19 @@ impl SiffReader{
             op
         );
         Ok((lifetime, intensity))
+    }
+
+    /// Return two arrays: the intensity (photon counts) and
+    /// the phasor representation of the pixelwise photon histogram.
+    /// 
+    /// TODO: Implement!
+    /// 
+    pub fn get_frames_phasor(
+        &self,
+        frames : &[u64],
+        registration : Option<&RegistrationDict>,
+    ) -> Result<(Array3<Complex<f64>>, Array3<u16>), CorrosiffError> {
+        unimplemented!()
     }
 
     /// Returns a 1D array of `u64` values corresponding to the
@@ -2325,6 +2339,572 @@ impl SiffReader{
         Ok((lifetime_array, intensity_array))
     }
 
+    /// Computes the phasor representation of the region masked
+    /// by the ROI specified by the boolean array `roi`. The ROI
+    /// should have the same shape as the frames' `y` and `x` dimensions.
+    /// Returns the phasor and intensity data in a tuple, since it's
+    /// rare that you can use the phasor without needing to refer to
+    /// the intensity as well
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `roi` - A 2D boolean array with the same shape as the frames'
+    /// `y` and `x` dimensions. The ROI is a mask determining which pixels
+    /// of each frame should be used to compute the phasor
+    /// 
+    /// * `frames` - A slice of `u64` values corresponding to the
+    /// frame numbers to retrieve
+    /// 
+    /// * `registration` - An optional `HashMap<u64, (i32, i32)>` which
+    /// contains the pixel shifts for each frame. If this is `None`,
+    /// the frames are read unregistered (runs faster).
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<(Array1<Complex<f64>>, Array1<u64>), CorrosiffError>` - A tuple
+    /// containing the phasor data and intensity data for the frames requested
+    /// (respectively), each of shape `(frames.len(),)`. 
+    /// The lifetime is in units of the histogram width, and
+    /// to transform to picoseconds, you need to know the pulse
+    /// repetition rate. The intensity data is photon counts in the
+    /// ROI (as in `sum_roi_flat`).
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// // TODO
+    /// ```
+    /// 
+    /// ## Errors
+    /// 
+    /// * `CorrosiffError::DimensionsError(DimensionsError)` - If the frames requested
+    /// are out of bounds, do not share the same shape, or the ROI does not share
+    /// the same shape as the frames (the underlying `DimensionsError` is attached to this error)
+    /// 
+    /// ## See also
+    /// 
+    /// - `sum_roi_phasor_volume` - for a 3D ROI mask
+    /// - `sum_rois_phasor_flat` - for a set of 2D ROI masks
+    /// - `sum_rois_phasor_volume` - for a set of 3D ROI masks
+    pub fn sum_roi_phasor_flat(
+        &self,
+        roi : &ArrayView2<bool>,
+        frames : &[u64],
+        registration : Option<&RegistrationDict>,
+    ) -> Result<(Array1<Complex<f64>>, Array1<u64>), CorrosiffError> {
+
+        // Check that the frames are in bounds
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+        
+        // Check that the frames share a shape with the mask
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        if array_dims.to_tuple() != roi.dim() {
+            return Err(FramesError::DimensionsError(
+                DimensionsError::MismatchedDimensions{
+                    required : array_dims,
+                    requested : Dimensions::from_tuple(roi.dim()),
+                }
+            ).into());
+        }
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let mut intensity_array = Array1::<u64>::zeros(frames.len());
+        let mut phasor_array = Array1::<Complex<f64>>::zeros(frames.len());
+
+        let cos_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).cos())
+        );
+
+        let sin_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).sin())
+        );
+
+        let op = 
+        |
+            frames : &[u64],
+            chunk_intensity : &mut ArrayViewMut1<u64>,
+            chunk_phasor : &mut ArrayViewMut1<Complex<f64>>,
+            reader : &mut File
+        | -> Result<(), CorrosiffError> {
+            match registration {
+                Some(reg) => {
+                    izip!(
+                        frames,
+                        chunk_phasor.iter_mut(),
+                        chunk_intensity.iter_mut(),
+                    ).try_for_each(
+                            |(&this_frame, mut phasor_sum, mut intensity_sum)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_mask_registered(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut phasor_sum,
+                                &mut intensity_sum,
+                                &roi.view(),
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                                *reg.get(&this_frame).unwrap(),
+                            )?;
+                            Ok(())
+                    })?;
+                },
+                None => {
+                    izip!(
+                        frames,
+                        chunk_phasor.iter_mut(),
+                        chunk_intensity.iter_mut(),
+                    ).try_for_each(
+                            |(&this_frame, mut phasor_sum, mut intensity_sum)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_mask(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut phasor_sum,
+                                &mut intensity_sum,
+                                &roi.view(),
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                            )?;
+                            Ok(())
+                        })?;
+                },
+            }
+            Ok(())
+        };
+
+        parallelize_op!(
+            (intensity_array, phasor_array),
+            2500,
+            frames,
+            self._filename,
+            op
+        );
+
+        Ok((phasor_array, intensity_array))
+    }
+
+
+    /// Computes the phasor representation of the region masked
+    /// by the 3d ROI specified by the boolean array `roi`. The ROI's
+    /// slowest axis is the slice axis, and the last two dimensions
+    /// should have the same shape as the frames' `y` and `x` dimensions.
+    /// The z planes will be iterated through alongside the frames, so
+    /// that `roi.slice(s![0, .., ..])` will be applied to the first frame,
+    /// `roi.slice(s![1, .., ..])` to the second frame, in general the
+    ///  `n % roi.dim().0` plane to the nth frame.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `roi` - A 3D boolean array with the first dimension equal to
+    /// the number of planes in the ROI, and the second and third dimensions
+    /// corresponding to the `y` and `x` dimensions of the frames. The ROI is
+    /// a mask which will be used to sum the intensity of the frames requested
+    /// and compute the phasor of the photons in the ROI.
+    /// 
+    /// * `frames` - A slice of `u64` values corresponding to the
+    /// frame numbers to retrieve
+    /// 
+    /// * `registration` - An optional `HashMap<u64, (i32, i32)>` which
+    /// contains the pixel shifts for each frame. If this is `None`,
+    /// the frames are read unregistered (runs faster).
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<(Array1<Complex<f64>>, Array1<u64>), CorrosiffError>` - A tuple
+    /// containing the phasor and intensity data for the frames requested
+    /// (respectively), each of shape `(frames.len(),)`. The phasor
+    /// is a complex number
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// // TODO
+    /// 
+    /// ```
+    /// 
+    /// ## See also
+    /// 
+    /// * `sum_roi_phasor_flat` - for a 2D ROI mask
+    /// 
+    /// * `sum_rois_phasor_flat` - for a set of 2D ROI masks
+    /// 
+    /// * `sum_rois_phasor_volume` - for a set of 3D ROI masks
+    pub fn sum_roi_phasor_volume(
+        &self,
+        roi : &ArrayView3<bool>,
+        frames : &[u64],
+        registration : Option<&RegistrationDict>,
+    ) -> Result<(Array1<Complex<f64>>, Array1<u64>), CorrosiffError> {
+        // Check that the frames are in bounds
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+        
+        // Check that the frames share a shape with the mask
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        if array_dims.to_tuple() != (roi.dim().1, roi.dim().2) {
+            return Err(FramesError::DimensionsError(
+                DimensionsError::MismatchedDimensions{
+                    required : array_dims,
+                    requested : Dimensions::from_tuple((roi.dim().1, roi.dim().2)),
+                }
+            ).into());
+        }
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let mut intensity_array = Array1::<u64>::zeros(frames.len());
+        let mut phasor_array = Array1::<Complex<f64>>::zeros(frames.len());
+
+        let cos_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).cos())
+        );
+
+        let sin_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).sin())
+        );
+
+        // Still not ready for macro magic! Hope to revisit this
+        let chunk_size = 2500;
+
+        let n_threads = frames.len()/chunk_size + 1;
+        let remainder = frames.len() % n_threads;
+
+        // Compute the bounds for each threads operation
+        let mut offsets = vec![];
+        let mut start = 0;
+        for i in 0..n_threads {
+            let end = start + chunk_size + if i < remainder { 1 } else { 0 };
+            offsets.push((start, end));
+            start = end;
+        }
+
+        // Create an array of chunks to parallelize
+        let array_chunks : Vec<_> = izip!(
+            intensity_array.axis_chunks_iter_mut(Axis(0), chunk_size),
+            phasor_array.axis_chunks_iter_mut(Axis(0), chunk_size)
+        ).collect();
+        
+        array_chunks.into_par_iter().enumerate().try_for_each(
+            |(chunk_idx, (mut intensity_chunk, mut phasor_chunk))| ->
+            Result<(), CorrosiffError> {
+            // Get the frame numbers and ifds for the frames in the chunk
+            let start = chunk_idx * chunk_size;
+            let end = ((chunk_idx + 1) * chunk_size).min(frames.len());
+
+            let local_frames = &frames[start..end];
+            let mut local_f = File::open(self._filename.clone()).unwrap();
+
+            let roi_cycle = roi.axis_iter(Axis(0)).cycle();
+            // roi_cycle needs to be incremented by the start value
+            // modulo the length of the roi_cycle
+            let roi_cycle = roi_cycle.skip(start % roi.dim().0);
+
+            match registration {
+                Some(reg) => {
+                    izip!(local_frames.iter(), intensity_chunk.iter_mut(), phasor_chunk.iter_mut(), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_frame_intensities, mut this_frame_phasors, rois_plane)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_mask_registered(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_frame_phasors,
+                                &mut this_frame_intensities,
+                                &rois_plane,
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                                *reg.get(&this_frame).unwrap(),
+                            )?;
+                            Ok(())
+                    })?;
+                },
+                None => {
+                    izip!(local_frames.iter(), intensity_chunk.iter_mut(), phasor_chunk.iter_mut(), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_frame_intensities, mut this_frame_phasors, rois_plane)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_mask(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_frame_phasors,
+                                &mut this_frame_intensities,
+                                &rois_plane,
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                            )?;
+                            Ok(())
+                        })?;
+                },
+            }
+            Ok(())
+            }
+        )?;
+
+        Ok((phasor_array, intensity_array))
+    }
+
+    pub fn sum_rois_phasor_flat(
+        &self,
+        rois : &ArrayView3<bool>,
+        frames : &[u64],
+        registration : Option<&RegistrationDict>,
+    ) -> Result<(Array2<Complex<f64>>, Array2<u64>), CorrosiffError> {
+
+        // Check that the frames are in bounds
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+
+        // Check that the frames share a shape with the mask
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        if array_dims.to_tuple() != (rois.dim().1, rois.dim().2) {
+            return Err(FramesError::DimensionsError(
+                DimensionsError::MismatchedDimensions{
+                    required : array_dims,
+                    requested : Dimensions::from_tuple((rois.dim().1, rois.dim().2)),
+                }
+            ).into());
+        }
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let mut intensity_array = Array2::<u64>::zeros((frames.len(), rois.dim().0));
+        let mut phasor_array = Array2::<Complex<f64>>::zeros((frames.len(), rois.dim().0));
+
+        let cos_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).cos())
+        );
+
+        let sin_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).sin())
+        );
+
+        let op =
+        |
+            frames : &[u64],
+            chunk_intensity : &mut ArrayViewMut2<u64>,
+            chunk_phasor : &mut ArrayViewMut2<Complex<f64>>,
+            reader : &mut File
+        | -> Result<(), CorrosiffError> {
+            match registration {
+                Some(reg) => {
+                    izip!(
+                        frames,
+                        chunk_phasor.axis_iter_mut(Axis(0)),
+                        chunk_intensity.axis_iter_mut(Axis(0)),
+                    ).try_for_each(
+                            |(&this_frame, mut phasor_sum, mut intensity_sum)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_masks_registered(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut phasor_sum,
+                                &mut intensity_sum,
+                                &rois.view(),
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                                *reg.get(&this_frame).unwrap(),
+                            )?;
+                            Ok(())
+                    })?;
+                },
+                None => {
+                    izip!(
+                        frames,
+                        chunk_phasor.axis_iter_mut(Axis(0)),
+                        chunk_intensity.axis_iter_mut(Axis(0)),
+                    ).try_for_each(
+                            |(&this_frame, mut phasor_sum, mut intensity_sum)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_masks(
+                                reader,
+                                &self._ifds[this_frame as usize],
+                                &mut phasor_sum,
+                                &mut intensity_sum,
+                                &rois.view(),
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                            )?;
+                            Ok(())
+                        })?;
+                },
+            }
+            Ok(())
+        };
+
+        parallelize_op!(
+            (intensity_array, phasor_array),
+            2500,
+            frames,
+            self._filename,
+            op
+        );
+
+        Ok((phasor_array, intensity_array))
+    }
+
+    pub fn sum_rois_phasor_volume(
+        &self,
+        rois : &ArrayView4<bool>,
+        frames : &[u64],
+        registration : Option<&RegistrationDict>,
+    ) -> Result<(Array2<Complex<f64>>, Array2<u64>), CorrosiffError> {
+
+        // Check that the frames are in bounds
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+
+        // Check that the frames share a shape with the mask
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        if array_dims.to_tuple() != (rois.dim().2, rois.dim().3) {
+            return Err(FramesError::DimensionsError(
+                DimensionsError::MismatchedDimensions{
+                    required : array_dims,
+                    requested : Dimensions::from_tuple((rois.dim().2, rois.dim().3)),
+                }
+            ).into());
+        }
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let mut intensity_array = Array2::<u64>::zeros((frames.len(), rois.dim().0));
+        let mut phasor_array = Array2::<Complex<f64>>::zeros((frames.len(), rois.dim().0));
+
+        let cos_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).cos())
+        );
+
+        let sin_lookup = Array1::<f64>::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).sin())
+        );
+
+        // Still not ready for macro magic! Hope to revisit this
+
+        let chunk_size = 2500;
+
+        let n_threads = frames.len()/chunk_size + 1;
+        let remainder = frames.len() % n_threads;
+
+        // Compute the bounds for each threads operation
+        let mut offsets = vec![];
+        let mut start = 0;
+        for i in 0..n_threads {
+            let end = start + chunk_size + if i < remainder { 1 } else { 0 };
+            offsets.push((start, end));
+            start = end;
+        }
+
+        // Create an array of chunks to parallelize
+        let array_chunks : Vec<_> = izip!(
+            intensity_array.axis_chunks_iter_mut(Axis(0), chunk_size),
+            phasor_array.axis_chunks_iter_mut(Axis(0), chunk_size)
+        ).collect();
+
+        array_chunks.into_par_iter().enumerate().try_for_each(
+            |(chunk_idx, (mut intensity_chunk, mut phasor_chunk))| ->
+            Result<(), CorrosiffError> {
+            // Get the frame numbers and ifds for the frames in the chunk
+            let start = chunk_idx * chunk_size;
+            let end = ((chunk_idx + 1) * chunk_size).min(frames.len());
+
+            let local_frames = &frames[start..end];
+            let mut local_f = File::open(self._filename.clone()).unwrap();
+
+            let roi_cycle = rois.axis_iter(Axis(1)).cycle();
+            // roi_cycle needs to be incremented by the start value
+            // modulo the length of the roi_cycle
+            let roi_cycle = roi_cycle.skip(start % rois.dim().1);
+
+            match registration {
+                Some(reg) => {
+                    izip!(local_frames.iter(), intensity_chunk.axis_iter_mut(Axis(0)), phasor_chunk.axis_iter_mut(Axis(0)), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_frame_intensities, mut this_frame_phasors, rois_plane)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_masks_registered(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_frame_phasors,
+                                &mut this_frame_intensities,
+                                &rois_plane,
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                                *reg.get(&this_frame).unwrap(),
+                            )?;
+                            Ok(())
+                    })?;
+                },
+                None => {
+                    izip!(local_frames.iter(), intensity_chunk.axis_iter_mut(Axis(0)), phasor_chunk.axis_iter_mut(Axis(0)), roi_cycle)
+                        .try_for_each(
+                            |(&this_frame, mut this_frame_intensities, mut this_frame_phasors, rois_plane)|
+                            -> Result<(), CorrosiffError> {
+                            sum_phasor_intensity_masks(
+                                &mut local_f,
+                                &self._ifds[this_frame as usize],
+                                &mut this_frame_phasors,
+                                &mut this_frame_intensities,
+                                &rois_plane,
+                                &cos_lookup.view(),
+                                &sin_lookup.view(),
+                            )?;
+                            Ok(())
+                        })?;
+                },
+            }
+            Ok(())
+            }
+        )?;
+
+        Ok((phasor_array, intensity_array))
+    }
+
+
     /// Copies the tiff/siff header from the currently
     /// opened file to the position of the writer.
     /// 
@@ -3001,6 +3581,116 @@ mod tests {
     }
 
     #[test]
+    fn test_2d_roi_phasor() {
+        let reader = SiffReader::open(TEST_FILE_PATH).unwrap();
+        let frames = (0..300).map(|x| x as u64).collect::<Vec<_>>();
+
+        let mut roi = Array2::<bool>::from_elem(
+            (reader.image_dims().unwrap().ydim as usize, reader.image_dims().unwrap().xdim as usize),
+            true
+        );
+
+        roi.mapv_inplace(|_| rand::random::<bool>());
+
+        let (flim, intensity) = reader.sum_roi_phasor_flat(&roi.view(), &frames, None).unwrap();
+
+        let intensity_from_mask = reader.sum_roi_flat(&roi.view(), &frames, None).unwrap();
+
+        assert_eq!(intensity, intensity_from_mask);
+
+        println!("{:?}", flim);
+
+
+        // Now do the same with registration
+        // Assert eq without nans
+        // assert_eq!(
+        //     flim.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>(),
+        //     empirical.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
+        // );
+
+        //////// MULTIPLE 2D ROIS NOW //////////
+        
+        let mut rois = Array3::<bool>::from_elem(
+            (
+                10 as usize,
+                reader.image_dims().unwrap().ydim as usize,
+                reader.image_dims().unwrap().xdim as usize
+            ),
+            true
+        );
+
+        rois.mapv_inplace(|_| rand::random::<bool>());
+
+        // let (flim, intensity) = reader.sum_rois_flim_flat(&rois.view(), &frames, None).unwrap();
+
+        // // Compare against just manually masking the intensity array
+        // let intensity_from_mask = reader.sum_rois_flat(&rois.view(), &frames, None).unwrap();
+
+        // assert_eq!(intensity, intensity_from_mask);
+
+        // let roi_wise_sums = rois.axis_iter(Axis(0)).map(
+        //     |roi| {
+        //         let (flim, intensity) = reader.sum_roi_flim_flat(&roi, &frames, None).unwrap();
+        //         (flim, intensity)
+        //     }
+        // ).collect::<Vec<_>>();
+
+        // // Compare against the single roi mask method
+        // izip!(
+        //     flim.axis_iter(Axis(1)),
+        //     intensity.axis_iter(Axis(1)),
+        //     roi_wise_sums.iter()
+        // ).for_each(
+        //     |(flim_roiwise, intensity_roiwise,(single_roi_flim, single_roi_intensity))|
+        //     {
+        //         assert_eq!(
+        //             flim_roiwise.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>(),
+        //             single_roi_flim.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
+        //         );
+        //         assert_eq!(intensity_roiwise, single_roi_intensity);
+        //     }
+        // );
+
+        // // Now test with registration
+
+        // let mut reg = RegistrationDict::new();
+
+        // frames.iter().for_each(|&x| {
+        //     reg.insert(x, (rand::random::<i32>() % reader.image_dims().unwrap().ydim as i32, rand::random::<i32>() % reader.image_dims().unwrap().xdim as i32));
+        // });
+
+        // let (flim, intensity) = reader.sum_rois_flim_flat(&rois.view(), &frames, Some(&reg)).unwrap();
+
+        // // Compare against just manually masking the intensity array
+        // let intensity_from_mask = reader.sum_rois_flat(&rois.view(), &frames, Some(&reg)).unwrap();
+
+        // assert_eq!(intensity, intensity_from_mask);
+
+        // let roi_wise_sums = rois.axis_iter(Axis(0)).map(
+        //     |roi| {
+        //         let (flim, intensity) = reader.sum_roi_flim_flat(&roi, &frames, Some(&reg)).unwrap();
+        //         (flim, intensity)
+        //     }
+        // ).collect::<Vec<_>>();
+
+        // // Compare against the single roi mask method
+
+        // izip!(
+        //     flim.axis_iter(Axis(1)),
+        //     intensity.axis_iter(Axis(1)),
+        //     roi_wise_sums.iter()
+        // ).for_each(
+        //     |(flim_roiwise, intensity_roiwise,(single_roi_flim, single_roi_intensity))|
+        //     {
+        //         assert_eq!(
+        //             flim_roiwise.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>(),
+        //             single_roi_flim.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
+        //         );
+        //         assert_eq!(intensity_roiwise, single_roi_intensity);
+        //     }
+        // );
+    }
+    #[test]
     fn test_3d_roi_flim(){
         let reader = SiffReader::open(BIG_FILE_PATH).unwrap();
         let frames = (0..300).map(|x| x as u64).collect::<Vec<_>>();
@@ -3174,8 +3864,126 @@ mod tests {
                 assert_eq!(intensity_roiwise, single_roi_intensity);
             }
         );
+    }
 
+    #[test]
+    fn test_3d_roi_phasor() {
+        let reader = SiffReader::open(BIG_FILE_PATH).unwrap();
+        let frames = (0..300).map(|x| x as u64).collect::<Vec<_>>();
 
+        // 10 slice roi
+        let mut roi = Array3::<bool>::from_elem(
+            (
+                10 as usize,
+                reader.image_dims().unwrap().ydim as usize,
+                reader.image_dims().unwrap().xdim as usize
+            ),
+            true
+        );
+
+        roi.mapv_inplace(|_| rand::random::<bool>());
+
+        let (_flim, intensity) = reader.sum_roi_phasor_volume(&roi.view(), &frames, None).unwrap();
+
+        let intensity_from_mask = reader.sum_roi_volume(&roi.view(), &frames, None).unwrap();
+
+        assert_eq!(intensity, intensity_from_mask);
+
+        // Now do the same with registration
+
+        let mut reg = RegistrationDict::new();
+        frames.iter().for_each(|&x| {
+            reg.insert(x, (rand::random::<i32>() % reader.image_dims().unwrap().ydim as i32, rand::random::<i32>() % reader.image_dims().unwrap().xdim as i32));
+        });
+
+        let (_flim, intensity) = reader.sum_roi_phasor_volume(&roi.view(), &frames, Some(&reg)).unwrap();
+
+        let intensity_from_mask = reader.sum_roi_volume(&roi.view(), &frames, Some(&reg)).unwrap();
+
+        assert_eq!(intensity, intensity_from_mask);
+
+        //////// MULTIPLE 3D ROIS NOW //////////
+
+        let mut rois = Array4::<bool>::from_elem(
+            (
+                7 as usize,
+                10 as usize,
+                reader.image_dims().unwrap().ydim as usize,
+                reader.image_dims().unwrap().xdim as usize
+            ),
+            true
+        );
+
+        rois.mapv_inplace(|_| rand::random::<bool>());
+
+        let (flim, intensity) = reader.sum_rois_phasor_volume(&rois.view(), &frames, None).unwrap();
+
+        // Compare against just manually masking the intensity array
+        let intensity_from_mask = reader.sum_rois_volume(&rois.view(), &frames, None).unwrap();
+
+        assert_eq!(intensity, intensity_from_mask);
+
+        let roi_wise_sums = rois.axis_iter(Axis(0)).map(
+            |roi| {
+                let (flim, intensity) = reader.sum_roi_phasor_volume(&roi, &frames, None).unwrap();
+                (flim, intensity)
+            }
+        ).collect::<Vec<_>>();
+
+        // Compare against the single roi mask method
+        izip!(
+            flim.axis_iter(Axis(1)),
+            intensity.axis_iter(Axis(1)),
+            roi_wise_sums.iter()
+        ).for_each(
+            |(flim_roiwise, intensity_roiwise,(single_roi_flim, single_roi_intensity))|
+            {
+                assert_eq!(
+                    flim_roiwise.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>(),
+                    single_roi_flim.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
+                );
+                assert_eq!(intensity_roiwise, single_roi_intensity);
+            }
+        );
+
+        // Now test with registration
+
+        let mut reg = RegistrationDict::new();
+
+        frames.iter().for_each(|&x| {
+            reg.insert(x, (rand::random::<i32>() % reader.image_dims().unwrap().ydim as i32, rand::random::<i32>() % reader.image_dims().unwrap().xdim as i32));
+        });
+
+        let (flim, intensity) = reader.sum_rois_flim_volume(&rois.view(), &frames, Some(&reg)).unwrap();
+
+        // Compare against just manually masking the intensity array
+        let intensity_from_mask = reader.sum_rois_volume(&rois.view(), &frames, Some(&reg)).unwrap();
+
+        assert_eq!(intensity, intensity_from_mask);
+
+        let roi_wise_sums = rois.axis_iter(Axis(0)).map(
+            |roi| {
+                let (flim, intensity) = reader.sum_roi_flim_volume(&roi, &frames, Some(&reg)).unwrap();
+                (flim, intensity)
+            }
+        ).collect::<Vec<_>>();
+
+        // Compare against the single roi mask method
+
+        izip!(
+            flim.axis_iter(Axis(1)),
+            intensity.axis_iter(Axis(1)),
+            roi_wise_sums.iter()
+        ).for_each(
+            |(flim_roiwise, intensity_roiwise,(single_roi_flim, single_roi_intensity))|
+            {
+                assert_eq!(
+                    flim_roiwise.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>(),
+                    single_roi_flim.iter().filter_map(|&x| if x.is_finite() { Some(x) } else { None }).collect::<Vec<_>>()
+                );
+                assert_eq!(intensity_roiwise, single_roi_intensity);
+            }
+        ); 
     }
 
     #[test]

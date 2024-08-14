@@ -1,24 +1,8 @@
 //! Methods in this submodule deal with extracting a pixelwise or ROI-wide
 //! empirical lifetime from the data stored in a frame of a `.siff` file.
 use binrw::io::{Read, Seek};
-use registered::{
-    _load_flim_intensity_empirical_compressed_registered,
-    _load_flim_intensity_empirical_uncompressed_registered,
-    _sum_mask_empirical_intensity_compressed_registered,
-    _sum_mask_empirical_intensity_raw_registered,
-    _sum_masks_empirical_intensity_compressed_registered,
-    _sum_masks_empirical_intensity_raw_registered,
-};
-use unregistered::{
-    _load_flim_intensity_empirical_compressed,
-    _load_flim_intensity_empirical_uncompressed,
-    _load_flim_array_empirical_uncompressed,
-    _load_flim_array_empirical_compressed,
-    _sum_mask_empirical_intensity_compressed,
-    _sum_mask_empirical_intensity_raw,
-    _sum_masks_empirical_intensity_compressed,
-    _sum_masks_empirical_intensity_raw,
-};
+use registered::*;
+use unregistered::*;
 
 use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 use ndarray::prelude::*;
@@ -35,6 +19,15 @@ use crate::{
 mod unregistered;
 mod registered;
 
+/// For crate-level use to access the functions in this module
+pub (crate) mod exports {
+    pub (crate) use super::load_flim_empirical_and_intensity_arrays;
+    pub (crate) use super::load_flim_empirical_and_intensity_arrays_registered;
+    pub (crate) use super::sum_lifetime_intensity_mask;
+    pub (crate) use super::sum_lifetime_intensity_mask_registered;
+    pub (crate) use super::sum_lifetime_intensity_masks;
+    pub (crate) use super::sum_lifetime_intensity_masks_registered;
+}
 
 /// Loads an array with the pixelwise empirical lifetime
 /// from the frame pointed to by the IFD. The reader

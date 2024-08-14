@@ -10,9 +10,9 @@ TODOS:
 
 - A real README.
 
-- More methods for estimating "lifetime" (e.g. RLD, MLE...)
+- Testing has gotten reaaaaaal lax...
 
-- Phasor!
+- More methods for estimating "lifetime" (e.g. RLD, MLE...)
 
 - `mask` methods for `tau_d` or for `.tiff` files.
 
@@ -27,7 +27,8 @@ don't exist! It will just crash! Because I don't use the `?` correctly.
 - More sophisticated macros so that I don't have to manually go through
 each file to make every combination of registered / unregistered /
 mask / masks + flim. This seems like exactly the type of thing the
-`Rust` macro system is perfect for (once I understand it better!)
+`Rust` macro system is perfect for (once I understand it better!). This is
+obviously a very bad boilerplate-y v0.0.1 type implementation.
 
 - Consider making more useful and interesting `Rust` structs for
 return values, rather than just passing back `ndarray` objects. I

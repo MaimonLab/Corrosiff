@@ -25,6 +25,10 @@ use crate::{
 
 use super::load::load_array_intensity;
 
+/// Packs a single frame of y by x by tau data
+/// into a pre-allocated array by reading the given
+/// `strip_bytes` from the reader. Used for
+/// "raw" format frames.
 #[binrw::parser(reader)]
 fn _load_tau_d_raw<T : Into<u64>>(
     array : &mut ArrayViewMut3<u16>,
@@ -50,6 +54,11 @@ fn _load_tau_d_raw<T : Into<u64>>(
     Ok(())
 }
 
+/// Packs a single frame of y by x by tau data
+/// into a pre-allocated array by reading the given
+/// `strip_bytes` from the reader. Used for
+/// "raw" format frames. Applies registration to the data
+/// by shifting the pixels during reads.
 #[binrw::parser(reader)]
 fn _load_tau_d_raw_registered<T : Into<u64>>(
     array : &mut ArrayViewMut3<u16>,
@@ -76,6 +85,10 @@ fn _load_tau_d_raw_registered<T : Into<u64>>(
     Ok(())
 }
 
+/// Packs a single frame of y by x by tau data
+/// into a pre-allocated array by reading the given
+/// `strip_bytes` from the reader. Used for
+/// "compressed" format frames.
 #[binrw::parser(reader)]
 fn _load_tau_d_compressed<T: Into<u64>>(
     array : &mut ArrayViewMut3<u16>,
@@ -127,6 +140,11 @@ fn _load_tau_d_compressed<T: Into<u64>>(
     Ok(())
 }
 
+/// Packs a single frame of y by x by tau data
+/// into a pre-allocated array by reading the given
+/// `strip_bytes` from the reader. Used for
+/// "compressed" format frames. Applies registration to the data
+/// by shifting the pixels during reads.
 #[binrw::parser(reader, endian)]
 fn _load_tau_d_compressed_registered<T : Into<u64>>(
     array : &mut ArrayViewMut3<u16>,
@@ -181,7 +199,8 @@ pub fn load_array_tau_d<I : IFD, ReaderT: Read + Seek>(
 
 /// Loads a single frame of a tau_d array with dimensions
 /// `ydim` x `xdim` x `hdim` from a `.siff` file and applies
-/// registration to the data.
+/// registration to the data. Calls the internal `_load_tau_d_raw_registered`
+/// and `_load_tau_d_compressed_registered` functions.
 pub fn load_array_tau_d_registered<I : IFD, ReaderT : Read + Seek>(
     reader : &mut ReaderT,
     ifd : &I,
