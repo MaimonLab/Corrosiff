@@ -747,7 +747,101 @@ impl SiffReader{
         frames : &[u64],
         registration : Option<&RegistrationDict>,
     ) -> Result<(Array3<Complex<f64>>, Array3<u16>), CorrosiffError> {
-        unimplemented!()
+        // Check that the frames are in bounds
+        _check_frames_in_bounds(&frames, &self._ifds).map_err(
+            FramesError::DimensionsError)?;
+        
+        // Check that the frames share a shape
+        let array_dims = self._image_dims.clone().or_else(
+            || _check_shared_shape(frames, &self._ifds)
+        ).ok_or(FramesError::DimensionsError(
+            DimensionsError::NoConsistentDimensions)
+        )?;
+
+        let mut registration = registration;
+
+        // Check that every frame requested has a registration value,
+        // if registration is used. Otherwise just ignore.
+        _check_registration(&mut registration, &frames)?;
+
+        let (mut phasor, mut intensity) = (
+            Array3::<Complex<f64>>::zeros((frames.len(), array_dims.ydim as usize, array_dims.xdim as usize)),
+            Array3::<u16>::zeros((frames.len(), array_dims.ydim as usize, array_dims.xdim as usize))
+        ); 
+
+        let cos_lookup = Array1::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).cos())
+        );
+
+        let sin_lookup = Array1::from_iter(
+            (0..self.file_format.num_flim_tau_bins().unwrap())
+            .map(|x| (x as f64).sin())
+        );
+
+        let op = 
+        |
+            frames : &[u64],
+            chunk_intensity : &mut ArrayViewMut3<u16>,
+            chunk_phasor : &mut ArrayViewMut3<Complex<f64>>,
+            reader : &mut File
+        | -> Result<(), CorrosiffError> {
+            match registration {
+                Some(reg) => {
+                    izip!(
+                        frames,
+                        chunk_phasor.axis_iter_mut(Axis(0)),
+                        chunk_intensity.axis_iter_mut(Axis(0))
+                    ).try_for_each(
+                        
+                        |(&this_frame, mut this_chunk_p, mut this_chunk_i)|
+                        -> Result<(), CorrosiffError> {
+                        load_flim_phasor_and_intensity_arrays_registered(
+                            reader,
+                            &self._ifds[this_frame as usize],
+                            &mut this_chunk_p,
+                            &mut this_chunk_i,
+                            &cos_lookup.view(),
+                            &sin_lookup.view(),
+                            *reg.get(&this_frame).unwrap(),
+                        )
+                        }
+
+                    )?;
+                },
+                None => {
+                    izip!(
+                        frames,
+                        chunk_phasor.axis_iter_mut(Axis(0)),
+                        chunk_intensity.axis_iter_mut(Axis(0))
+                    ).try_for_each(
+
+                        |(&this_frame, mut this_chunk_p, mut this_chunk_i)|
+                        -> Result<(), CorrosiffError> {
+                        load_flim_phasor_and_intensity_arrays(
+                            reader,
+                            &self._ifds[this_frame as usize],
+                            &mut this_chunk_p,
+                            &mut this_chunk_i,
+                            &cos_lookup.view(),
+                            &sin_lookup.view(),
+                        )
+                        }
+
+                    )?;
+                },
+            }
+            Ok(())
+        };
+        
+        parallelize_op!(
+            (intensity, phasor), 
+            2500, 
+            frames, 
+            self._filename,
+            op
+        );
+        Ok((phasor, intensity))
     }
 
     /// Returns a 1D array of `u64` values corresponding to the
@@ -2667,6 +2761,45 @@ impl SiffReader{
         Ok((phasor_array, intensity_array))
     }
 
+    /// Sums a collection of masks over each frame requested
+    /// and returns the phasor representation of photon arrival times
+    /// and intensity of the frames requested. Each ROI should have the same shape
+    /// as the frames' `y` and `x` dimensions. Runs slightly slower
+    /// than applying the mask to just one ROI, so the gains scale as ~n_masks.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `rois` - A 3D boolean array with the first dimension equal to
+    /// the number of ROIs, and the second and third dimensions
+    /// corresponding to the `y` and `x` dimensions of the frames. The ROIs are
+    /// masks which will be used to sum the intensity of the frames requested.
+    /// 
+    /// * `frames` - A slice of `u64` values corresponding to the
+    /// frame numbers to retrieve
+    /// 
+    /// * `registration` - An optional `HashMap<u64, (i32, i32)>` which
+    /// contains the pixel shifts for each frame. If this is `None`,
+    /// the frames are read unregistered (runs faster).
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<(Array2<Complex<f64>>, Array2<u64>), CorrosiffError>` - A tuple
+    /// containing the phasor and intensity data for the frames requested
+    /// within each ROI specified. The first element of the tuple is the
+    /// phasor data, and the second element is the intensity data.
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// let reader = SiffReader::open("file.siff");
+    /// // TODO
+    /// ```
+    /// 
+    /// ## See also
+    /// 
+    /// - `sum_roi_phasor_flat` - for a 2D ROI mask
+    /// - `sum_rois_phasor_volume` - for a set of 3D ROI masks
+    /// - `sum_roi_phasor_volume` - for a single 3D ROI mask
     pub fn sum_rois_phasor_flat(
         &self,
         rois : &ArrayView3<bool>,
@@ -2777,6 +2910,52 @@ impl SiffReader{
         Ok((phasor_array, intensity_array))
     }
 
+
+    /// Sums a collection of 3d masks over each frame requested
+    /// and returns the phasor representation of photon arrival times
+    /// and intensity of the frames requested. Each ROI should have the same shape
+    /// as the frames' `y` and `x` dimensions. Iterates across the
+    /// dimension 1 (i.e. the second dimension of the `rois` array)
+    /// alongside the frames, so for each mask (masks are indexed along the slowest
+    /// dimension) the 1st frame is applied to the the first plane of the mask,
+    /// the 2nd frame to the second plane, and the nth frame to the
+    /// n % roi.dim().1 plane. Runs slightly slower than applying
+    /// the mask to just one ROI, so the gains scale as ~n_masks.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `rois` - A 4D boolean array with the first dimension equal to
+    /// the number of ROIs, the second dimension corresponding to each z
+    /// plane for each mask, and the third and fourth dimensions
+    /// corresponding to the `y` and `x` dimensions of the frames. The ROIs are
+    /// masks which will be used to sum the intensity of the frames requested.
+    /// 
+    /// * `frames` - A slice of `u64` values corresponding to the
+    /// frame numbers to retrieve
+    /// 
+    /// * `registration` - An optional `HashMap<u64, (i32, i32)>` which
+    /// contains the pixel shifts for each frame. If this is `None`,
+    /// the frames are read unregistered (runs faster).
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<(Array2<Complex<f64>>, Array2<u64>), CorrosiffError>` - A tuple
+    /// containing the phasor and intensity data for the frames requested
+    /// within each ROI specified. The first element of the tuple is the
+    /// phasor data, and the second element is the intensity data.
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// let reader = SiffReader::open("file.siff");
+    /// // TODO
+    /// ```
+    /// 
+    /// ## See also
+    /// 
+    /// - `sum_roi_phasor_flat` - for a 2D ROI mask
+    /// - `sum_rois_phasor_flat` - for a set of 2D ROI masks
+    /// - `sum_roi_phasor_volume` - for a single 3D ROI mask
     pub fn sum_rois_phasor_volume(
         &self,
         rois : &ArrayView4<bool>,
