@@ -780,8 +780,8 @@ criterion_group!(
     name = benches;
     config = Criterion::default();
     targets = 
-        // criterion_benchmark_read_one_mask,
-        // criterion_benchmark_read_multiple_masks,
+        criterion_benchmark_read_one_mask,
+        criterion_benchmark_read_multiple_masks,
         criterion_benchmark_read_one_phasor_mask,
     //criterion_benchmark_histograms,
 );
