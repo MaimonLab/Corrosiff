@@ -788,14 +788,15 @@ impl SiffReader{
             Array3::<u16>::zeros((frames.len(), array_dims.ydim as usize, array_dims.xdim as usize))
         ); 
 
+        let num_tau = self.file_format.num_flim_tau_bins().unwrap();
         let cos_lookup = Array1::from_iter(
-            (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).cos())
+            (0..num_tau)
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).cos())
         );
 
         let sin_lookup = Array1::from_iter(
             (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).sin())
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).sin())
         );
 
         let op = 
@@ -2535,14 +2536,15 @@ impl SiffReader{
         let mut intensity_array = Array1::<u64>::zeros(frames.len());
         let mut phasor_array = Array1::<Complex<f64>>::zeros(frames.len());
 
-        let cos_lookup = Array1::<f64>::from_iter(
-            (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).cos())
+        let num_tau = self.file_format.num_flim_tau_bins().unwrap();
+        let cos_lookup = Array1::from_iter(
+            (0..num_tau)
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).cos())
         );
 
-        let sin_lookup = Array1::<f64>::from_iter(
+        let sin_lookup = Array1::from_iter(
             (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).sin())
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).sin())
         );
 
         let op = 
@@ -2690,14 +2692,15 @@ impl SiffReader{
         let mut intensity_array = Array1::<u64>::zeros(frames.len());
         let mut phasor_array = Array1::<Complex<f64>>::zeros(frames.len());
 
-        let cos_lookup = Array1::<f64>::from_iter(
-            (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).cos())
+        let num_tau = self.file_format.num_flim_tau_bins().unwrap();
+        let cos_lookup = Array1::from_iter(
+            (0..num_tau)
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).cos())
         );
 
-        let sin_lookup = Array1::<f64>::from_iter(
+        let sin_lookup = Array1::from_iter(
             (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).sin())
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).sin())
         );
 
         // Still not ready for macro magic! Hope to revisit this
@@ -2855,14 +2858,15 @@ impl SiffReader{
         let mut intensity_array = Array2::<u64>::zeros((frames.len(), rois.dim().0));
         let mut phasor_array = Array2::<Complex<f64>>::zeros((frames.len(), rois.dim().0));
 
-        let cos_lookup = Array1::<f64>::from_iter(
-            (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).cos())
+        let num_tau = self.file_format.num_flim_tau_bins().unwrap();
+        let cos_lookup = Array1::from_iter(
+            (0..num_tau)
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).cos())
         );
 
-        let sin_lookup = Array1::<f64>::from_iter(
+        let sin_lookup = Array1::from_iter(
             (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).sin())
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).sin())
         );
 
         let op =
@@ -3011,14 +3015,15 @@ impl SiffReader{
         let mut intensity_array = Array2::<u64>::zeros((frames.len(), rois.dim().0));
         let mut phasor_array = Array2::<Complex<f64>>::zeros((frames.len(), rois.dim().0));
 
-        let cos_lookup = Array1::<f64>::from_iter(
-            (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).cos())
+        let num_tau = self.file_format.num_flim_tau_bins().unwrap();
+        let cos_lookup = Array1::from_iter(
+            (0..num_tau)
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).cos())
         );
 
-        let sin_lookup = Array1::<f64>::from_iter(
+        let sin_lookup = Array1::from_iter(
             (0..self.file_format.num_flim_tau_bins().unwrap())
-            .map(|x| (x as f64).sin())
+            .map(|x| (2.0_f64*std::f64::consts::PI*x as f64/num_tau as f64).sin())
         );
 
         // Still not ready for macro magic! Hope to revisit this
