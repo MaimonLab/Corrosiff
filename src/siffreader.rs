@@ -196,7 +196,15 @@ impl SiffReader{
     /// Size of the FLIM arrival time histogram
     /// in bins.
     /// 
+    /// ## Returns
     /// 
+    /// Number of actual bins (irrespective of what the bin
+    /// size corresponds to in real time units)
+    /// 
+    /// ## Errors
+    /// 
+    /// * `CorrosiffError::DimensionsError(DimensionsError)` - If the histogram size
+    /// is unknown or was unable to be parsed (or if the file is not a `.siff`)
     pub fn num_flim_bins(&self) -> Result<u32, CorrosiffError> {
         self.file_format.num_flim_tau_bins()
         .ok_or(CorrosiffError::DimensionsError(
