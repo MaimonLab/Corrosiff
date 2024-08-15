@@ -193,6 +193,17 @@ impl SiffReader{
         self._filename.to_str().unwrap().ends_with(".siff")
     }
 
+    /// Size of the FLIM arrival time histogram
+    /// in bins.
+    /// 
+    /// 
+    pub fn num_flim_bins(&self) -> Result<u32, CorrosiffError> {
+        self.file_format.num_flim_tau_bins()
+        .ok_or(CorrosiffError::DimensionsError(
+            DimensionsError::UnknownHistogramSize
+        ))
+    }
+
     /// Return the metadata objects corresponding to
     /// each of the requested frames.
     pub fn get_frame_metadata(&self, frames : &[u64]) 

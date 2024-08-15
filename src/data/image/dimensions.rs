@@ -272,6 +272,7 @@ pub enum DimensionsError {
     MismatchedDimensions{required : Dimensions, requested: Dimensions},
     NoConsistentDimensions,
     IncorrectFrames,
+    UnknownHistogramSize,
 }
 
 impl Dimensions {
@@ -322,6 +323,9 @@ impl std::fmt::Display for DimensionsError {
             },
             DimensionsError::IncorrectFrames => {
                 write!(f, "Requested frames are out of bounds.")
+            },
+            DimensionsError::UnknownHistogramSize => {
+                write!(f, "Unknown arrival time histogram size.")
             }
         }
     }
