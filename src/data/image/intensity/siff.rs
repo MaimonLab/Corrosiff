@@ -145,25 +145,25 @@ pub fn load_array<'a, ReaderT, I>(
             load_array_raw_siff,
             (
                 &mut array.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
             load_array_compressed_siff,
             (
                 &mut array.view_mut(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
             load_array_tiff,
             (
                 &mut array.view_mut(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -222,9 +222,9 @@ pub fn load_array_registered<'a, T, S>(
             load_array_raw_siff_registered,
             (
                 &mut array.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -232,8 +232,8 @@ pub fn load_array_registered<'a, T, S>(
             load_array_compressed_siff_registered,
             (
                 &mut array.view_mut(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -241,8 +241,8 @@ pub fn load_array_registered<'a, T, S>(
             load_array_tiff_registered,
             (
                 &mut array.view_mut(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         )
@@ -277,9 +277,9 @@ pub fn extract_mask<I : IFD, ReaderT : Read + Seek>(
                 target_array,
                 mask,
                 lookup_table,
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
@@ -288,8 +288,8 @@ pub fn extract_mask<I : IFD, ReaderT : Read + Seek>(
                 target_array,
                 mask,
                 lookup_table,
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -326,9 +326,9 @@ pub fn extract_mask_registered<I : IFD, ReaderT : Read + Seek>(
                 target_array,
                 mask,
                 lookup_table,
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -338,8 +338,8 @@ pub fn extract_mask_registered<I : IFD, ReaderT : Read + Seek>(
                 target_array,
                 mask,
                 lookup_table,
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         )
@@ -395,9 +395,9 @@ pub fn sum_mask<I : IFD, ReaderT : Read + Seek>(
             (
                 frame_sum,
                 &mask.view(),
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
@@ -405,8 +405,8 @@ pub fn sum_mask<I : IFD, ReaderT : Read + Seek>(
             (
                 frame_sum,
                 &mask.view(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -428,9 +428,9 @@ pub fn sum_mask_registered<I : IFD, ReaderT : Read + Seek>(
             (
                 frame_sum,
                 &mask.view(),
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -439,8 +439,8 @@ pub fn sum_mask_registered<I : IFD, ReaderT : Read + Seek>(
             (
                 frame_sum,
                 &mask.view(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         )
@@ -495,9 +495,9 @@ pub fn sum_masks<I : IFD, ReaderT: Read + Seek>(
             (
                 &mut frame_sums.view_mut(),
                 &masks.view(),
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
@@ -505,8 +505,8 @@ pub fn sum_masks<I : IFD, ReaderT: Read + Seek>(
             (
                 &mut frame_sums.view_mut(),
                 &masks.view(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -575,9 +575,9 @@ pub fn sum_masks_registered<I : IFD, ReaderT: Read + Seek>(
             (
                 &mut frame_sums.view_mut(),
                 &masks.view(),
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -586,8 +586,8 @@ pub fn sum_masks_registered<I : IFD, ReaderT: Read + Seek>(
             (
                 &mut frame_sums.view_mut(),
                 &masks.view(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         )

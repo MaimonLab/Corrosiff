@@ -77,18 +77,18 @@ fn _load_flim_array_empirical<ReaderT, I>(
             _load_flim_array_empirical_uncompressed,
             (
                 &mut array.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
             _load_flim_array_empirical_compressed,
             (
                 &mut array.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -132,9 +132,9 @@ pub fn load_flim_empirical_and_intensity_arrays<I: IFD, ReaderT : Read + Seek>(
             (
                 &mut lifetime.view_mut(),
                 &mut intensity.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
@@ -142,9 +142,9 @@ pub fn load_flim_empirical_and_intensity_arrays<I: IFD, ReaderT : Read + Seek>(
             (
                 &mut lifetime.view_mut(),
                 &mut intensity.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -167,9 +167,9 @@ pub fn load_flim_empirical_and_intensity_arrays_registered
             (
                 &mut lifetime.view_mut(),
                 &mut intensity.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -178,9 +178,9 @@ pub fn load_flim_empirical_and_intensity_arrays_registered
             (
                 &mut lifetime.view_mut(),
                 &mut intensity.view_mut(),
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         )
@@ -230,9 +230,9 @@ pub fn sum_lifetime_intensity_mask< I : IFD, ReaderT : Read + Seek>(
                 &roi,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
@@ -241,9 +241,9 @@ pub fn sum_lifetime_intensity_mask< I : IFD, ReaderT : Read + Seek>(
                 &roi,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -266,9 +266,9 @@ pub fn sum_lifetime_intensity_mask_registered< I : IFD, ReaderT : Read + Seek>(
                 &roi,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -278,9 +278,9 @@ pub fn sum_lifetime_intensity_mask_registered< I : IFD, ReaderT : Read + Seek>(
                 &roi,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         )
@@ -303,9 +303,9 @@ pub fn sum_lifetime_intensity_masks< I : IFD, ReaderT : Read + Seek>(
                 &rois,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         ),
         (
@@ -314,9 +314,9 @@ pub fn sum_lifetime_intensity_masks< I : IFD, ReaderT : Read + Seek>(
                 &rois,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
             )
         )
     )
@@ -340,9 +340,9 @@ pub fn sum_lifetime_intensity_masks_registered< I : IFD, ReaderT : Read + Seek>(
                 &rois,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         ),
@@ -352,9 +352,9 @@ pub fn sum_lifetime_intensity_masks_registered< I : IFD, ReaderT : Read + Seek>(
                 &rois,
                 lifetime,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 registration
             )
         )

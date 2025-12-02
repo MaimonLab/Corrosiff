@@ -310,8 +310,8 @@ impl SiffReader{
             5000, 
             frames, 
             self._filename.to_str().unwrap(),
-            | filename : &str |{BufReader::with_capacity(800, File::open(filename).unwrap())},
-            |frames : &[u64], chunk : &mut ArrayBase<_, Ix1>, reader : &mut BufReader<File>| {
+            | filename : &str | {BufReader::with_capacity(800, File::open(filename).unwrap())},
+            | frames : &[u64], chunk : &mut ArrayBase<_, Ix1>, reader : &mut BufReader<File>| {
                 let ifds = frames.iter().map(|&x| &self._ifds[x as usize]).collect::<Vec<_>>();
                 get_epoch_timestamps_laser(&ifds, reader)
                     .iter().zip(chunk.iter_mut())
@@ -460,6 +460,65 @@ impl SiffReader{
             Ok(())
             }
         )?;
+        Ok(array)
+    }
+
+
+    /// Return an array of total laser sync pulses at the
+    /// time of the onset of each frame. Should be closely
+    /// related to the laser clock epoch timestamps, but no
+    /// time arithmetic is performed and so it may be more
+    /// robust.
+    /// 
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `frames` - A slice of `u64` values corresponding to the
+    /// frame numbers to retrieve
+    /// 
+    /// ## Returns
+    /// 
+    /// * `Result<Array1<u64>, CorrosiffError>` - A 1D array of `u64` values
+    /// corresponding to the total laser sync pulses at the onset of each frame.
+    /// This should be closely related to the laser clock epoch timestamps, but no
+    /// time arithmetic is performed and so it may be more robust.
+    /// ## Example
+    /// 
+    /// ```rust, ignore
+    /// let reader = SiffReader::open("file.siff");
+    /// reader.get_sync_number(&[0, 1, 2]);
+    /// ```
+    /// 
+    /// ## Errors
+    /// 
+    /// * `CorrosiffError::NoSystemTimestamps` - If the system timestamps
+    /// are not present in the file, this error is returned.
+    /// 
+    /// * `CorrosiffError::DimensionsError(DimensionsError)` - If the frames requested
+    /// are out of bounds (the underlying `DimensionsError` is attached to this error)
+    pub fn get_sync_number(&self, frames : &[u64]) -> Result<Array1<u64>, CorrosiffError> {
+        _check_frames_in_bounds(frames, &self._ifds)?;
+
+        let mut array = Array1::<u64>::zeros(frames.len());
+
+        let op = | frames : &[u64], chunk : &mut ArrayBase<_, Ix1>, reader : &mut BufReader<File> | 
+        -> Result<(), CorrosiffError> {
+            let ifds = frames.iter().map(|&x| &self._ifds[x as usize]).collect::<Vec<_>>();
+            get_sync_number(&ifds, reader)
+                .iter().zip(chunk.iter_mut())
+                .for_each(|(&x, y)| *y = x);
+            Ok(())
+        };
+
+        parallelize_op!(
+            array,
+            5000,
+            frames,
+            self._filename.to_str().unwrap(),
+            | filename : &str | { BufReader::with_capacity(800, File::open(filename).unwrap()) },
+            op
+        );
+
         Ok(array)
     }
 
@@ -4606,7 +4665,6 @@ mod tests {
         assert_ne!(both_times[(0, 0)], both_times[(0, 2)]);
         assert_eq!(both_times[(1, 0)], both_times[(1, 1)]);
         assert_ne!(both_times[(1, 0)], both_times[(1, 2)]);
-
 
     }
 }

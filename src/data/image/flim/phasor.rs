@@ -89,9 +89,9 @@ pub fn load_flim_phasor_and_intensity_arrays<I : IFD, ReaderT: Read + Seek> (
             (
                 phasor_data,
                 intensity_data,
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup
             )
@@ -101,9 +101,9 @@ pub fn load_flim_phasor_and_intensity_arrays<I : IFD, ReaderT: Read + Seek> (
             (
                 phasor_data,
                 intensity_data,
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup
             )
@@ -160,9 +160,9 @@ pub fn load_flim_phasor_and_intensity_arrays_registered<I : IFD, ReaderT: Read +
             (
                 phasor_data,
                 intensity_data,
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup,
                 registration
@@ -173,9 +173,9 @@ pub fn load_flim_phasor_and_intensity_arrays_registered<I : IFD, ReaderT: Read +
             (
                 phasor_data,
                 intensity_data,
-                ifd.get_tag(StripByteCounts).unwrap().value(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup,
                 registration
@@ -233,9 +233,9 @@ pub fn sum_phasor_intensity_mask< I : IFD, ReaderT : Read + Seek>(
                 &roi,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup
             )
@@ -246,9 +246,9 @@ pub fn sum_phasor_intensity_mask< I : IFD, ReaderT : Read + Seek>(
                 &roi,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup
             )
@@ -309,9 +309,9 @@ pub fn sum_phasor_intensity_mask_registered< I :IFD, ReaderT: Read + Seek>(
                 &roi,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup,
                 registration
@@ -323,9 +323,9 @@ pub fn sum_phasor_intensity_mask_registered< I :IFD, ReaderT: Read + Seek>(
                 &roi,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup,
                 registration
@@ -379,9 +379,9 @@ pub fn sum_phasor_intensity_masks< I : IFD, ReaderT : Read + Seek>(
                 &rois,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup
             )
@@ -392,9 +392,9 @@ pub fn sum_phasor_intensity_masks< I : IFD, ReaderT : Read + Seek>(
                 &rois,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup
             )
@@ -449,9 +449,9 @@ pub fn sum_phasor_intensity_masks_registered<I:IFD, ReaderT: Read + Seek>(
                 &rois,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup,
                 registration
@@ -463,9 +463,9 @@ pub fn sum_phasor_intensity_masks_registered<I:IFD, ReaderT: Read + Seek>(
                 &rois,
                 phasor,
                 intensity,
-                ifd.get_tag(StripByteCounts).unwrap().value().into(),
-                ifd.height().unwrap().into() as u32,
-                ifd.width().unwrap().into() as u32,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup,
                 registration

@@ -37,8 +37,8 @@ fn _load_histogram_compressed<I, ReaderT>(
     ) -> Result<(), IOError> 
     where I : IFD, ReaderT : Read + Seek {
 
-    let strip_byte_counts = ifd.get_tag(StripByteCounts).unwrap().value();
-    
+    let strip_byte_counts = ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value();
+
     let mut data: Vec<u8> = vec![0; strip_byte_counts.into() as usize];
     reader.read_exact(&mut data)?;
 
@@ -58,7 +58,7 @@ fn _load_histogram_uncompressed<I, ReaderT>(
     ) -> Result<(), IOError> 
     where ReaderT : Read + Seek, I : IFD{
 
-    let strip_byte_counts = ifd.get_tag(StripByteCounts).unwrap().value();
+    let strip_byte_counts = ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value();
     let mut data : Vec<u8> = vec![0; strip_byte_counts.into() as usize];
     reader.read_exact(&mut data)?;
 
@@ -116,7 +116,7 @@ pub fn load_histogram<I, ReaderT>(
             )?.value().into()
         )  
     )?;
-    match ifd.get_tag(Siff).unwrap().value().into() {
+    match ifd.get_tag(Siff).ok_or(IOError::other("Failed to get Siff tag"))?.value().into() {
         0 => {
             _load_histogram_uncompressed(ifd, reader, histogram)?;
         },
@@ -139,10 +139,10 @@ fn _load_histogram_mask_uncompressed<I : IFD>(
     histogram : &mut ArrayViewMut1<u64>,
     ) -> Result<(), IOError> {
 
-    let xdim = ifd.width().unwrap().into() as u32;
-    let ydim = ifd.height().unwrap().into() as u32;
+    let xdim = ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32;
+    let ydim = ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32;
     let hlen = histogram.len();
-    let strip_bytes = ifd.get_tag(StripByteCounts).unwrap().value();
+    let strip_bytes = ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value();
     photonwise_op!(
         reader,
         strip_bytes,
@@ -162,9 +162,9 @@ fn _load_histogram_mask_compressed<I : IFD>(
     mask : &ArrayView2<bool>,
     histogram : &mut ArrayViewMut1<u64>
     ) -> Result<(), IOError> {
-    
-    let xdim = ifd.width().unwrap().into() as u32;
-    let ydim = ifd.height().unwrap().into() as u32;
+
+    let xdim = ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32;
+    let ydim = ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32;
 
     reader.seek(std::io::SeekFrom::Current(
         -((ydim * xdim * std::mem::size_of::<u16>() as u32) as i64)
@@ -180,8 +180,8 @@ fn _load_histogram_mask_compressed<I : IFD>(
         |err| IOError::new(IOErrorKind::InvalidData, err)
     )?;
 
-    let strip_byte_counts = ifd.get_tag(StripByteCounts).unwrap().value();
-    
+    let strip_byte_counts = ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value();
+
     let mut data: Vec<u8> = vec![0; strip_byte_counts.into() as usize];
     reader.read_exact(&mut data)?;
 
@@ -236,7 +236,7 @@ pub fn load_histogram_mask<I : IFD, ReaderT : Read + Seek>(
             )?.value().into()
         )  
     )?;
-    match ifd.get_tag(Siff).unwrap().value().into() {
+    match ifd.get_tag(Siff).ok_or(IOError::other("Failed to get Siff tag"))?.value().into() {
         0 => {
             _load_histogram_mask_uncompressed(reader, binrw::Endian::Little, (ifd, mask, histogram))
         },
@@ -310,7 +310,7 @@ impl FlimHistogram {
             data : Array1::zeros(Dim(n_bins as usize)),
         };
 
-        match ifd.get_tag(Siff).unwrap().value().into() {
+        match ifd.get_tag(Siff).ok_or(IOError::other("Failed to get Siff tag"))?.value().into() {
             0 => {
                 _load_histogram_uncompressed(ifd, reader, &mut hist.data.view_mut())?;
             },

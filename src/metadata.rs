@@ -473,11 +473,38 @@ pub fn get_epoch_timestamps_both<I : IFD, ReaderT : Read + Seek>(
     Ok(vec_out)
 }
 
+/// Returns the timestamps for a set of frames in _experiment time_,
+/// which is seconds since the image acquisition began.
+/// 
+/// ## Arguments
+/// 
+/// * `ifds` - A slice of `IFD` objects corresponding to the
+/// frames to get timestamps from
+/// 
+/// * `reader` - An object with read access to the file
+/// 
+/// ## Returns
+/// 
+/// A `Vec<u64>` containing the total number of laser sync pulses
+/// since the image acquisition began, in the order
+/// of the requested `ifd` slice.
+pub fn get_sync_number<I : IFD, ReaderT : Read + Seek>(
+    ifds: &[&I],
+    reader : &mut ReaderT
+    ) -> Vec<u64> {
+    ifds.iter().map(|&ifd| 
+        FrameMetadata::sync_stamps_from_metadata_str(
+            &FrameMetadata::metadata_string(ifd, reader)
+        )
+    ).collect()
+}
+
 pub mod getters{
     pub use super::{
         get_experiment_timestamps,
         get_epoch_timestamps_laser,
         get_epoch_timestamps_system,
+        get_sync_number,
         get_appended_text,
         get_epoch_timestamps_both,
     };
