@@ -1477,6 +1477,7 @@ impl SiffReader{
         frames : &[u64],
         registration : Option<&RegistrationDict>
     ) -> Result<Array2<u64>, CorrosiffError> {
+        
         _check_frames_in_bounds(&frames, &self._ifds)?;
 
         let array_dims = self._image_dims.clone().or_else(
@@ -1494,7 +1495,6 @@ impl SiffReader{
 
         let mut registration = registration;
         _check_registration(&mut registration, &frames)?;
-
 
         let num_slices = roi.dim().0;
 
@@ -1536,8 +1536,8 @@ impl SiffReader{
             // Chunks are (volumes , pixels)
             
             // Get the frame numbers and ifds for the frames in the chunk
-            let start = chunk_idx * chunk_size;
-            let end = ((chunk_idx + 1) * chunk_size).min(frames.len());
+            let start = chunk_idx * chunk_size * roi.dim().0;
+            let end = ((chunk_idx + 1) * chunk_size * roi.dim().0).min(frames.len());
 
             let local_frames = &frames[start..end];
             let mut local_f = File::open(&self._filename).unwrap();
@@ -1551,7 +1551,7 @@ impl SiffReader{
 
             // This has to work differently from the other versions because
             // each tick of the 0th axis corresponds to a volume, not a frame,
-            // so it has to be repeated num_slices times
+            // so the chunk needs to be repeated num_slices times.
             match registration {
                 Some(reg) => {
                     izip!(
