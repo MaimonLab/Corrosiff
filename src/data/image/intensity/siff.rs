@@ -264,7 +264,7 @@ pub fn load_array_registered<'a, T, S>(
 pub fn extract_mask<I : IFD, ReaderT : Read + Seek>(
     reader : &mut ReaderT,
     ifd : &I,
-    target_array : &mut ArrayViewMut1<u64>,
+    target_array : &mut ArrayViewMut1<u16>,
     mask : &ArrayView2<bool>,
     lookup_table : &ArrayView2<usize>,
 ) -> Result<(), IOError> {
@@ -311,7 +311,7 @@ pub fn extract_mask<I : IFD, ReaderT : Read + Seek>(
 pub fn extract_mask_registered<I : IFD, ReaderT : Read + Seek>(
     reader : &mut ReaderT,
     ifd : &I,
-    target_array : &mut ArrayViewMut1<u64>,
+    target_array : &mut ArrayViewMut1<u16>,
     mask : &ArrayView2<bool>,
     lookup_table : &ArrayView2<usize>,
     registration : (i32, i32),

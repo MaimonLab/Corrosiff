@@ -7,6 +7,8 @@ mod registered;
 use unregistered::{
     _load_flim_intensity_phasor_compressed,
     _load_flim_intensity_phasor_raw,
+    _extract_mask_phasor_intensity_raw,
+    _extract_mask_phasor_intensity_compressed,
     _sum_mask_phasor_intensity_compressed,
     _sum_mask_phasor_intensity_raw,
     _sum_masks_phasor_intensity_compressed,
@@ -16,6 +18,8 @@ use unregistered::{
 use registered::{
     _load_flim_intensity_phasor_compressed_registered,
     _load_flim_intensity_phasor_raw_registered,
+    _extract_mask_phasor_intensity_raw_registered,
+    _extract_mask_phasor_intensity_compressed_registered,
     _sum_mask_phasor_intensity_compressed_registered,
     _sum_mask_phasor_intensity_raw_registered,
     _sum_masks_phasor_intensity_compressed_registered,
@@ -40,7 +44,9 @@ pub (crate) mod exports {
         sum_phasor_intensity_mask,
         sum_phasor_intensity_mask_registered,
         sum_phasor_intensity_masks,
-        sum_phasor_intensity_masks_registered
+        sum_phasor_intensity_masks_registered,
+        extract_phasor_and_intensity_mask,
+        extract_phasor_and_intensity_mask_registered
     };
 }
 
@@ -178,6 +184,100 @@ pub fn load_flim_phasor_and_intensity_arrays_registered<I : IFD, ReaderT: Read +
                 ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
                 cos_lookup,
                 sin_lookup,
+                registration
+            )
+        )
+    )
+}
+
+
+/// Populates a 1d masked phasor and intensity array based on the frame of interest. The
+/// frame is not registered during reading.
+pub fn extract_phasor_and_intensity_mask<I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    phasor_data : &mut ArrayViewMut1<Complex<f64>>,
+    intensity_data : &mut ArrayViewMut1<u16>,
+    mask : &ArrayView2<bool>,
+    cos_lookup : &ArrayView1<f64>,
+    sin_lookup : &ArrayView1<f64>,
+    lookup_table : &ArrayView2<usize>,
+) -> Result<(), IOError> {
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _extract_mask_phasor_intensity_raw,
+            (
+                phasor_data,
+                intensity_data,
+                mask,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
+                &cos_lookup,
+                &sin_lookup,
+                lookup_table
+            )
+        ),
+        (
+            _extract_mask_phasor_intensity_compressed,
+            (
+                phasor_data,
+                intensity_data,
+                mask,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
+                &cos_lookup,
+                &sin_lookup,
+                lookup_table
+            )
+        )
+    )
+}
+
+pub fn extract_phasor_and_intensity_mask_registered<I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    phasor_data : &mut ArrayViewMut1<Complex<f64>>,
+    intensity_data : &mut ArrayViewMut1<u16>,
+    mask : &ArrayView2<bool>,
+    cos_lookup : &ArrayView1<f64>,
+    sin_lookup : &ArrayView1<f64>,
+    lookup_table : &ArrayView2<usize>,
+    registration : (i32, i32),
+) -> Result<(), IOError> {
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _extract_mask_phasor_intensity_raw_registered,
+            (
+                phasor_data,
+                intensity_data,
+                mask,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
+                &cos_lookup,
+                &sin_lookup,
+                &lookup_table,
+                registration
+            )
+        ),
+        (
+            _extract_mask_phasor_intensity_compressed_registered,
+            (
+                phasor_data,
+                intensity_data,
+                mask,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
+                &cos_lookup,
+                &sin_lookup,
+                &lookup_table,
                 registration
             )
         )

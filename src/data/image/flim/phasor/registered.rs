@@ -1,3 +1,7 @@
+/// Many of these methods re-use code but at the cost of efficiency,
+/// for example when you are using the mask methods you shouldn't
+/// copy the array and roll it -- you should just roll the indices
+/// 
 use std::io::{Error as IOError, ErrorKind as IOErrorKind};
 use num_complex::{Complex, c64};
 use bytemuck::try_cast_slice;
@@ -62,12 +66,73 @@ pub fn _load_flim_intensity_phasor_raw_registered<T : Into<u64>>(
         }
     );
 
-    intensity_array.iter().zip(phasor_array.iter_mut()).for_each(|(intensity, pixel)| {
-        *pixel /= *intensity as f64;
-    });
+    // intensity_array.iter().zip(phasor_array.iter_mut()).for_each(|(intensity, pixel)| {
+    //     *pixel /= *intensity as f64;
+    // });
 
     Ok(())
 }
+
+#[binrw::parser(reader)]
+pub fn _extract_mask_phasor_intensity_raw_registered<T : Into<u64>>(
+    phasor_array : &mut ArrayViewMut1<Complex<f64>>,
+    intensity_array : &mut ArrayViewMut1<u16>,
+    mask : &ArrayView2<bool>,
+    strip_byte_counts : T,
+    ydim : u32,
+    xdim : u32,
+    &cos_lookup : &ArrayView1<f64>,
+    &sin_lookup : &ArrayView1<f64>,
+    &lookup_table : &ArrayView2<usize>,
+    registration : (i32, i32),
+) -> Result<(), CorrosiffError> {
+    photonwise_op!(
+        reader, strip_byte_counts,
+        |siffphoton| {
+            let y = photon_to_y!(*siffphoton, registration.0, ydim);
+            let x = photon_to_x!(*siffphoton, registration.1, xdim);
+            let idx = lookup_table[[y, x]];
+            let mask_val = mask[[y, x]] as u16;
+            let tau = photon_to_tau_USIZE!(*siffphoton);
+            intensity_array[idx] += mask_val;
+            phasor_array[idx] += Complex::new(
+                cos_lookup[tau as usize % cos_lookup.len()],
+                sin_lookup[tau as usize % sin_lookup.len()]
+            ) * (mask_val as f64);
+        }       
+    );
+
+    // phasor_array.iter_mut().zip(intensity_array.iter()).for_each(|(pixel, intensity)| {
+    //     *pixel /= *intensity as f64;
+    // });
+
+    Ok(())
+}
+
+#[binrw::parser(reader, endian)]
+pub fn _extract_mask_phasor_intensity_compressed_registered<T : Into<u64>>(
+    phasor_array : &mut ArrayViewMut1<Complex<f64>>,
+    intensity_array : &mut ArrayViewMut1<u16>,
+    mask : &ArrayView2<bool>,
+    strip_byte_counts : T,
+    ydim : u32,
+    xdim : u32,
+    &cos_lookup : &ArrayView1<f64>,
+    &sin_lookup : &ArrayView1<f64>,
+    &lookup_table : &ArrayView2<usize>,
+    registration : (i32, i32),
+) -> Result<(), CorrosiffError> {
+    
+    let mask_rolled = roll(mask, (-registration.0, -registration.1));
+    let lookup_table_rolled = roll(&lookup_table, (-registration.0, -registration.1));
+    _extract_mask_phasor_intensity_compressed(
+        reader, endian,
+        (phasor_array, intensity_array, &mask_rolled.view(), strip_byte_counts.into(), ydim, xdim, &cos_lookup, &sin_lookup, &lookup_table_rolled.view())
+    )?;
+    Ok(())
+}
+
+
 
 #[binrw::parser(reader)]
 pub fn _sum_mask_phasor_intensity_raw_registered<T : Into<u64>>(
@@ -97,7 +162,7 @@ pub fn _sum_mask_phasor_intensity_raw_registered<T : Into<u64>>(
         }
     );
 
-    *phasor_sum /= *intensity_sum as f64;
+    // *phasor_sum /= *intensity_sum as f64;
 
     Ok(())
 }
@@ -139,11 +204,11 @@ pub fn _sum_masks_phasor_intensity_raw_registered<T : Into<u64>>(
         }
     );
 
-    izip!(phasor_sum.iter_mut(), intensity_sum.iter()).for_each(
-        |(lifetime_sum, intensity_sum)| {
-            *lifetime_sum /= *intensity_sum as f64;
-        }
-    );
+    // izip!(phasor_sum.iter_mut(), intensity_sum.iter()).for_each(
+    //     |(lifetime_sum, intensity_sum)| {
+    //         *lifetime_sum /= *intensity_sum as f64;
+    //     }
+    // );
 
     Ok(())
 }

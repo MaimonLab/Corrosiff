@@ -7,6 +7,7 @@ use crate::{
             flim::empirical_lifetime::unregistered::{
                 _load_flim_array_empirical_compressed,
                 _load_flim_intensity_empirical_compressed,
+                _extract_mask_empirical_intensity_compressed,
                 _sum_mask_empirical_intensity_compressed,
                 _sum_masks_empirical_intensity_compressed,
             },
@@ -123,6 +124,33 @@ pub fn _load_flim_intensity_empirical_uncompressed_registered<T : Into<u64>>(
         *pixel /= *intensity as f64;
     });
 
+
+    Ok(())
+}
+
+#[binrw::parser(reader)]
+pub fn _extract_mask_empirical_intensity_raw_registered<T : Into<u64>>(
+    mask : &ArrayView2<bool>,
+    lookup_table : &ArrayView2<usize>,
+    lifetime : &mut ArrayViewMut1<f64>,
+    intensity : &mut ArrayViewMut1<u16>,
+    strip_byte_counts : T,
+    ydim : u32,
+    xdim : u32,
+    registration : (i32, i32),
+) -> Result<(), CorrosiffError> {
+
+    photonwise_op!(
+        reader,
+        strip_byte_counts,
+        |siffphoton| {
+            let y = photon_to_y!(*siffphoton, registration.0, ydim);
+            let x = photon_to_x!(*siffphoton, registration.1, xdim);
+            lifetime[lookup_table[[y, x]]] += photon_to_tau_FLOAT!(*siffphoton)
+                * (mask[[y, x]] as u64 as f64);
+            intensity[lookup_table[[y, x]]] += mask[[y, x]] as u16;
+        }
+    );
 
     Ok(())
 }
@@ -255,4 +283,36 @@ pub fn _sum_masks_empirical_intensity_compressed_registered<T : Into<u64>>(
     )?;
 
     Ok(())
+}
+
+#[binrw::parser(reader, endian)]
+pub fn _extract_mask_empirical_intensity_compressed_registered<T : Into<u64>>(
+    mask : &ArrayView2<bool>,
+    lookup_table : &ArrayView2<usize>,
+    lifetime : &mut ArrayViewMut1<f64>,
+    intensity : &mut ArrayViewMut1<u16>,
+    strip_byte_counts : T,
+    ydim : u32,
+    xdim : u32,
+    registration : (i32, i32),
+) -> Result<(), CorrosiffError> {
+    // Roll the mask the opposite way and then just call the
+    // unregistered version
+    let mask_rolled = roll(mask, (-registration.0, -registration.1));
+    let table_rolled = roll(lookup_table, (-registration.0, -registration.1));
+    _extract_mask_empirical_intensity_compressed(
+        reader,
+        endian,
+        (
+            &mask_rolled.view(),
+            &table_rolled.view(),
+            lifetime,
+            intensity,
+            strip_byte_counts.into(),
+            ydim,
+            xdim,
+        )
+    )?;
+
+     Ok(())
 }

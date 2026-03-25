@@ -5,9 +5,7 @@ use itertools::izip;
 use ndarray::prelude::*;
 
 use crate::{
-    data::image::utils::photonwise_op,
-    data::image::dimensions::macros::*,
-    CorrosiffError,
+    CorrosiffError, data::image::{dimensions::macros::*, flim::phasor, utils::photonwise_op}
 };
 
 #[binrw::parser(reader)]
@@ -61,7 +59,7 @@ pub fn _load_flim_intensity_phasor_compressed<T : Into<u64>>(
                 );
             }
         );
-        *pixel /= *intensity as f64;
+        // *pixel /= *intensity as f64;
         arrival_time_pointer += *intensity as usize;
     });
     Ok(())
@@ -94,8 +92,103 @@ pub fn _load_flim_intensity_phasor_raw<T : Into<u64>>(
         }
     );
 
-    intensity_array.iter().zip(phasor_array.iter_mut()).for_each(|(intensity, pixel)| {
-        *pixel /= *intensity as f64;
+    // intensity_array.iter().zip(phasor_array.iter_mut()).for_each(|(intensity, pixel)| {
+    //     *pixel /= *intensity as f64;
+    // });
+
+    Ok(())
+}
+
+#[binrw::parser(reader)]
+pub fn _extract_mask_phasor_intensity_raw<T : Into<u64>>(
+    phasor_array : &mut ArrayViewMut1<Complex<f64>>,
+    intensity_array : &mut ArrayViewMut1<u16>,
+    mask : &ArrayView2<bool>,
+    strip_byte_counts : T,
+    ydim : u32,
+    xdim : u32,
+    &cos_lookup : &ArrayView1<f64>,
+    &sin_lookup : &ArrayView1<f64>,
+    lookup_table : &ArrayView2<usize>,
+) -> Result<(), CorrosiffError> {
+    
+    photonwise_op!(
+        reader, strip_byte_counts,
+        |siffphoton| {
+            let y = photon_to_y!(*siffphoton, 0, ydim);
+            let x = photon_to_x!(*siffphoton, 0, xdim);
+            let idx = lookup_table[[y, x]];
+            let tau = photon_to_tau_USIZE!(*siffphoton);
+            intensity_array[idx] += mask[[y, x]] as u16;
+            phasor_array[idx] += Complex::new(
+                cos_lookup[tau as usize % cos_lookup.len()],
+                sin_lookup[tau as usize % sin_lookup.len()]
+            ) * (mask[[y, x]] as u16 as f64);
+        }       
+    );
+
+    // phasor_array.iter_mut().zip(intensity_array.iter())
+    // .for_each(|(pixel, &intensity)| {
+    //     *pixel /= intensity as f64;
+    // });
+
+    Ok(())
+}
+
+#[binrw::parser(reader, endian)]
+pub fn _extract_mask_phasor_intensity_compressed<T : Into<u64>>(
+    phasor_array : &mut ArrayViewMut1<Complex<f64>>,
+    intensity_array : &mut ArrayViewMut1<u16>,
+    mask : &ArrayView2<bool>,
+    strip_byte_counts : T,
+    ydim : u32,
+    xdim : u32,
+    &cos_lookup : &ArrayView1<f64>,
+    &sin_lookup : &ArrayView1<f64>,
+    lookup_table : &ArrayView2<usize>,
+) -> Result<(), CorrosiffError> {
+
+    reader.seek(std::io::SeekFrom::Current(
+        -((ydim * xdim * std::mem::size_of::<u16>() as u32) as i64)
+    ))?;
+
+    let mut data : Vec<u8> = vec![0;
+        ydim as usize * xdim as usize * std::mem::size_of::<u16>()
+    ];
+
+    reader.read_exact(&mut data)?;
+
+    let intensity_data = try_cast_slice::<u8, u16>(&data).map_err(
+        |err| IOError::new(IOErrorKind::InvalidData, err)
+    )?;
+
+    let mut lifetime_data : Vec<u8> = vec![0; strip_byte_counts.into() as usize];
+    reader.read_exact(&mut lifetime_data)?;
+
+    let lifetime_data = try_cast_slice::<u8, u16>(&lifetime_data).map_err(
+        |err| IOError::new(IOErrorKind::InvalidData, err)
+    )?;
+
+    let mut lifetime_pointer : usize = 0;
+
+    let lookup_len = cos_lookup.len();
+    
+    izip!(
+        intensity_data.iter(),
+        mask.iter(),
+        lookup_table.iter(),
+    ).for_each(|(&intensity, maskpx, &lookup_idx)| {
+        intensity_array[lookup_idx] += (intensity as u16) * (*maskpx as u16);
+        phasor_array[lookup_idx] += (*maskpx as u16 as f64)
+            * lifetime_data[lifetime_pointer..lifetime_pointer+intensity as usize]
+            .iter()
+            .map(|tau| Complex::new(
+                cos_lookup[*tau as usize % lookup_len],
+                sin_lookup[*tau as usize % lookup_len]
+            ))
+            .sum::<Complex<f64>>();
+        // phasor_array[lookup_idx] /= (*maskpx as u16 as f64) * (intensity_array[lookup_idx] as f64);
+        lifetime_pointer += intensity as usize;
     });
 
     Ok(())
@@ -128,7 +221,7 @@ pub fn _sum_mask_phasor_intensity_raw<T : Into<u64>>(
         }
     );
 
-    *phasor_sum /= *intensity_sum as f64;
+    // *phasor_sum /= *intensity_sum as f64;
 
     Ok(())
 }
@@ -169,11 +262,11 @@ pub fn _sum_masks_phasor_intensity_raw<T : Into<u64>>(
         }
     );
 
-    izip!(phasor_sum.iter_mut(), intensity_sum.iter()).for_each(
-        |(lifetime_sum, intensity_sum)| {
-            *lifetime_sum /= *intensity_sum as f64;
-        }
-    );
+    // izip!(phasor_sum.iter_mut(), intensity_sum.iter()).for_each(
+    //     |(lifetime_sum, intensity_sum)| {
+    //         *lifetime_sum /= *intensity_sum as f64;
+    //     }
+    // );
 
     Ok(())
 }
@@ -226,7 +319,7 @@ pub fn _sum_mask_phasor_intensity_compressed<T : Into<u64>>(
         lifetime_pointer += *intensity as usize;
     });
 
-    *phasor_sum /= *intensity_sum as f64;
+    // *phasor_sum /= *intensity_sum as f64;
     Ok(())
 }
 
@@ -286,7 +379,7 @@ pub fn _sum_masks_phasor_intensity_compressed<T : Into<u64>>(
                     .sum::<Complex<f64>>();
             lifetime_pointer += *intensity as usize;
         });
-        *phasor_accumulator /= *intensity_accumulator as f64;
+        // *phasor_accumulator /= *intensity_accumulator as f64;
     });
 
     Ok(())

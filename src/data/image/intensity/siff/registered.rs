@@ -69,7 +69,7 @@ pub fn load_array_raw_siff_registered<T : Into<u64>> (
 
 #[binrw::parser(reader)]
 pub fn extract_mask_raw_siff_registered<T : Into<u64>>(
-    target_array : &mut ArrayViewMut1<u64>,
+    target_array : &mut ArrayViewMut1<u16>,
     mask : &ArrayView2<bool>,
     lookup_table : &ArrayView2<usize>,
     strip_bytes : T,
@@ -86,7 +86,7 @@ pub fn extract_mask_raw_siff_registered<T : Into<u64>>(
                 photon_to_y!(siffphoton, registration.0, ydim),
                 photon_to_x!(siffphoton, registration.1, xdim)
             );
-            target_array[lookup_table[[y, x]]] += mask[[y, x]] as u64;
+            target_array[lookup_table[[y, x]]] += mask[[y, x]] as u16;
         }
     );
 
@@ -165,7 +165,7 @@ pub fn load_array_compressed_siff_registered(
 
 #[binrw::parser(reader, endian)]
 pub fn extract_mask_compressed_siff_registered(
-    target_array : &mut ArrayViewMut1<u64>,
+    target_array : &mut ArrayViewMut1<u16>,
     mask : &ArrayView2<bool>,
     lookup_table : &ArrayView2<usize>,
     ydim : u32,
@@ -183,7 +183,7 @@ pub fn extract_mask_compressed_siff_registered(
     for (&mask_px, &frame_px, &lookup_px) in izip!(
         mask.iter(), frame_array.iter(), lookup_table.iter()
     ) {
-       target_array[lookup_px] += mask_px as u64 * frame_px as u64;
+       target_array[lookup_px] += mask_px as u16 * frame_px as u16;
     }
 
     Ok(())

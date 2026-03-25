@@ -6,6 +6,10 @@ and use `Rust`, which I have to admit has been pretty enjoyable.
 While most functionality is `.siff`-exclusive (because it's built
 around arrival time data), it can read frames from `.tiff` files too.
 
+At this point I think there is a lot to re-work in here -- way too
+much boilerplate and repetition in the `siffreader` methods. I
+will clean it up eventually.
+
 TODOS:
 
 - A real README.

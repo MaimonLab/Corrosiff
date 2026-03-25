@@ -23,6 +23,8 @@ mod registered;
 pub (crate) mod exports {
     pub (crate) use super::load_flim_empirical_and_intensity_arrays;
     pub (crate) use super::load_flim_empirical_and_intensity_arrays_registered;
+    pub (crate) use super::extract_lifetime_intensity_mask;
+    pub (crate) use super::extract_lifetime_intensity_mask_registered;
     pub (crate) use super::sum_lifetime_intensity_mask;
     pub (crate) use super::sum_lifetime_intensity_mask_registered;
     pub (crate) use super::sum_lifetime_intensity_masks;
@@ -178,6 +180,85 @@ pub fn load_flim_empirical_and_intensity_arrays_registered
             (
                 &mut lifetime.view_mut(),
                 &mut intensity.view_mut(),
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
+                registration
+            )
+        )
+    )
+}
+
+pub fn extract_lifetime_intensity_mask<I: IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    lifetime : &mut ArrayViewMut1<f64>,
+    intensity : &mut ArrayViewMut1<u16>,
+    roi : &ArrayView2<bool>,
+    lookup_table : &ArrayView2<usize>,
+) -> Result<(), CorrosiffError> {
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _extract_mask_empirical_intensity_raw,
+            (   
+                &roi,
+                &lookup_table,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
+            )
+        ),
+        (
+            _extract_mask_empirical_intensity_compressed,
+            (
+                &roi,
+                &lookup_table,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32
+            )
+        )
+    )
+}
+
+pub fn extract_lifetime_intensity_mask_registered<I : IFD, ReaderT : Read + Seek>(
+    reader : &mut ReaderT,
+    ifd : &I,
+    lifetime : &mut ArrayViewMut1<f64>,
+    intensity : &mut ArrayViewMut1<u16>,
+    roi : &ArrayView2<bool>,
+    lookup_table : &ArrayView2<usize>,
+    registration : (i32, i32),
+) -> Result<(), CorrosiffError> {
+    load_array_from_siff!(
+        reader,
+        ifd,
+        (
+            _extract_mask_empirical_intensity_raw_registered,
+            (   
+                &roi,
+                &lookup_table,
+                lifetime,
+                intensity,
+                ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
+                ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
+                ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
+                registration
+            )
+        ),
+        (
+            _extract_mask_empirical_intensity_compressed_registered,
+            (
+                &roi,
+                &lookup_table,
+                lifetime,
+                intensity,
                 ifd.get_tag(StripByteCounts).ok_or(IOError::other("Failed to get StripByteCounts"))?.value().into(),
                 ifd.height().ok_or(IOError::other("Failed to get height"))?.into() as u32,
                 ifd.width().ok_or(IOError::other("Failed to get width"))?.into() as u32,
